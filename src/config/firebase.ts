@@ -3,12 +3,14 @@ import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
-// Safe environment fallback configuration
+// Production Firebase Configuration for LocalPulse AI (localpulse-ai-a990f)
+const PRODUCTION_PROJECT_ID = 'localpulse-ai-a990f';
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDemoDummyKeyForLocalPulse12345',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'localpulse-ai-demo.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'localpulse-ai-demo',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'localpulse-ai-demo.appspot.com',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PRODUCTION_PROJECT_ID}.firebaseapp.com`,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || PRODUCTION_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PRODUCTION_PROJECT_ID}.appspot.com`,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789012:web:abcdef123456',
 };
@@ -21,11 +23,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// Check if running against local Firebase Emulator Suite
-const useEmulator = 
-  import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true' || 
-  import.meta.env.DEV || 
-  typeof window !== 'undefined' && window.location.hostname === 'localhost';
+// Intentional emulator configuration: only connect if explicitly requested via VITE_USE_FIREBASE_EMULATOR === 'true'
+const useEmulator = import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true';
 
 let emulatorsConnected = false;
 
@@ -61,7 +60,7 @@ export function connectEmulatorsOnce(): void {
   }
 }
 
-// Auto-connect in dev/browser environment
+// Auto-connect when intentional emulator mode is active
 if (typeof window !== 'undefined' && useEmulator) {
   connectEmulatorsOnce();
 }

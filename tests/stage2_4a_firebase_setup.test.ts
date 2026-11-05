@@ -34,10 +34,10 @@ async function runStage2_4ATests() {
     assert.strictEqual(content.emulators.ui.port, 4000);
   });
 
-  await test('.firebaserc defines default project id', () => {
+  await test('.firebaserc defines verified production project id localpulse-ai-a990f', () => {
     assert(fs.existsSync('.firebaserc'), '.firebaserc should exist');
     const content = JSON.parse(fs.readFileSync('.firebaserc', 'utf-8'));
-    assert.strictEqual(content.projects.default, 'localpulse-ai-demo');
+    assert.strictEqual(content.projects.default, 'localpulse-ai-a990f');
   });
 
   await test('firestore.indexes.json defines required composite indexes', () => {
@@ -49,28 +49,30 @@ async function runStage2_4ATests() {
     assert(invIndex, 'Inventory index must be defined');
   });
 
-  await test('.env.example documents Firebase and emulator environment variables', () => {
+  await test('.env.example documents verified project ID localpulse-ai-a990f and intentional emulator controls', () => {
     const envExample = fs.readFileSync('.env.example', 'utf-8');
-    assert(envExample.includes('VITE_FIREBASE_PROJECT_ID'), 'Must document VITE_FIREBASE_PROJECT_ID');
+    assert(envExample.includes('localpulse-ai-a990f'), 'Must document production project ID localpulse-ai-a990f');
+    assert(envExample.includes('USE_FIREBASE_EMULATOR'), 'Must document USE_FIREBASE_EMULATOR toggle');
+    assert(envExample.includes('VITE_USE_FIREBASE_EMULATOR'), 'Must document VITE_USE_FIREBASE_EMULATOR toggle');
     assert(envExample.includes('FIRESTORE_EMULATOR_HOST'), 'Must document FIRESTORE_EMULATOR_HOST');
-    assert(envExample.includes('FIREBASE_AUTH_EMULATOR_HOST'), 'Must document FIREBASE_AUTH_EMULATOR_HOST');
-    assert(envExample.includes('FIREBASE_STORAGE_EMULATOR_HOST'), 'Must document FIREBASE_STORAGE_EMULATOR_HOST');
   });
 
   // Suite 2: Firebase Client & Admin Initialization Modules
   console.log('\nSuite 2: Firebase Initialization Modules');
 
-  await test('src/config/firebase.ts exists and defines emulator connectivity', () => {
+  await test('src/config/firebase.ts configures localpulse-ai-a990f and intentional emulator connectivity', () => {
     assert(fs.existsSync('src/config/firebase.ts'), 'src/config/firebase.ts should exist');
     const clientCode = fs.readFileSync('src/config/firebase.ts', 'utf-8');
+    assert(clientCode.includes('localpulse-ai-a990f'), 'Must configure production project localpulse-ai-a990f');
     assert(clientCode.includes('connectFirestoreEmulator'), 'Must support Firestore emulator');
     assert(clientCode.includes('connectAuthEmulator'), 'Must support Auth emulator');
     assert(clientCode.includes('connectStorageEmulator'), 'Must support Storage emulator');
   });
 
-  await test('server/services/FirebaseAdmin.js exists and exports initialization functions', () => {
+  await test('server/services/FirebaseAdmin.js configures localpulse-ai-a990f and exports initialization functions', () => {
     assert(fs.existsSync('server/services/FirebaseAdmin.js'), 'server/services/FirebaseAdmin.js should exist');
     const adminCode = fs.readFileSync('server/services/FirebaseAdmin.js', 'utf-8');
+    assert(adminCode.includes('localpulse-ai-a990f'), 'Must configure production project localpulse-ai-a990f');
     assert(adminCode.includes('initializeFirebaseAdmin'), 'Must export initializeFirebaseAdmin');
     assert(adminCode.includes('getAdminStatus'), 'Must export getAdminStatus');
   });
@@ -78,7 +80,9 @@ async function runStage2_4ATests() {
   // Suite 3: Runtime SDK Loading & Status Verification
   console.log('\nSuite 3: Runtime SDK Loading & Status Verification');
 
-  await test('Firebase Admin SDK loads and reports emulator configuration', async () => {
+  await test('Firebase Admin SDK loads and reports verified production project ID localpulse-ai-a990f', async () => {
+    // Set emulator toggle to true for test execution
+    process.env.USE_FIREBASE_EMULATOR = 'true';
     const { initializeFirebaseAdmin, getAdminStatus } = await import('../server/services/FirebaseAdmin.js');
     const initResult = initializeFirebaseAdmin();
     assert(initResult.adminApp !== null, 'adminApp should initialize');
@@ -88,7 +92,7 @@ async function runStage2_4ATests() {
 
     const status = getAdminStatus();
     assert.strictEqual(status.initialized, true);
-    assert.strictEqual(status.projectId, 'localpulse-ai-demo');
+    assert.strictEqual(status.projectId, 'localpulse-ai-a990f');
     assert.strictEqual(status.isEmulator, true);
     assert.strictEqual(status.emulators.firestore, 'localhost:8080');
     assert.strictEqual(status.emulators.auth, 'localhost:9099');

@@ -3,11 +3,16 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
 
-// Default project configuration for LocalPulse AI
-const DEFAULT_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'localpulse-ai-demo';
+// Production Firebase Configuration for LocalPulse AI (localpulse-ai-a990f)
+const PRODUCTION_PROJECT_ID = 'localpulse-ai-a990f';
+const DEFAULT_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || PRODUCTION_PROJECT_ID;
 
-// Ensure emulator environment variables are set for local execution if not in production
-if (process.env.NODE_ENV !== 'production') {
+// Intentional emulator binding: only active when explicitly configured via USE_FIREBASE_EMULATOR or pre-set emulator hosts
+const isEmulatorRequested = 
+  process.env.USE_FIREBASE_EMULATOR === 'true' || 
+  Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+
+if (isEmulatorRequested) {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
     process.env.FIRESTORE_EMULATOR_HOST = 'localhost:8080';
   }
@@ -33,7 +38,7 @@ export function initializeFirebaseAdmin() {
   try {
     const existingApps = getApps();
     if (existingApps.length === 0) {
-      // In local emulator mode, default project ID is sufficient without service account credentials
+      // In local emulator mode or with Google Cloud credentials, initialize default project
       adminApp = initializeApp({
         projectId: DEFAULT_PROJECT_ID,
         storageBucket: `${DEFAULT_PROJECT_ID}.appspot.com`,
