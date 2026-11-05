@@ -119,3 +119,41 @@ export interface SupermarketProcurementPlan {
   warnings: string[];
   calculatedAt: string;
 }
+
+export type DocumentOperationType = 'BUY' | 'SELL';
+
+export interface ExtractedLineItem {
+  id?: string;
+  productName: string;
+  sku?: string | null;
+  skuMatched?: string | null;
+  quantity: number;
+  unit: UnitOfMeasure;
+  unitPrice: number;
+  lineTotal: number;
+  status: 'valid' | 'warning' | 'error';
+  validationMessage?: string;
+  currentStock?: number;
+  newStockPreview?: number;
+}
+
+export interface DocumentExtractionResult {
+  documentType: 'supplier_invoice' | 'sales_statement' | 'inventory_sheet' | 'receipt' | 'other';
+  supplierName: string | null;
+  buyerName: string | null;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  currency: string;
+  subtotal: number | null;
+  taxAmount: number | null;
+  discountAmount: number | null;
+  otherCharges: number | null;
+  grandTotal: number | null;
+  lineItems: ExtractedLineItem[];
+  warnings: string[];
+  missingFields: string[];
+  fieldsNeedingReview: string[];
+  sourceLanguage: 'en' | 'te' | 'mixed';
+  fingerprint: string;
+  rawExtractionText?: string;
+}

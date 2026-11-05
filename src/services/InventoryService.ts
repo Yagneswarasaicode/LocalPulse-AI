@@ -3,10 +3,12 @@ import { SUPERMARKET_SAMPLE_INVENTORY } from '../sampleData/supermarketSamples.t
 
 const STORAGE_KEY_SM_INVENTORY = 'localpulse_sm_inventory_v1';
 const STORAGE_KEY_MOVEMENTS = 'localpulse_movements_v1';
+const STORAGE_KEY_IDEMPOTENCY = 'localpulse_applied_idempotency_keys_v1';
 
 class InventoryService {
   private inventory: Map<string, InventoryItem[]> = new Map();
   private movements: InventoryMovement[] = [];
+  private appliedIdempotencyKeys: Set<string> = new Set();
 
   constructor() {
     this.loadState();
@@ -27,6 +29,11 @@ class InventoryService {
       const savedMovements = localStorage.getItem(STORAGE_KEY_MOVEMENTS);
       if (savedMovements) {
         this.movements = JSON.parse(savedMovements);
+      }
+
+      const savedKeys = localStorage.getItem(STORAGE_KEY_IDEMPOTENCY);
+      if (savedKeys) {
+        this.appliedIdempotencyKeys = new Set(JSON.parse(savedKeys));
       }
     } catch (e) {
       console.warn('[InventoryService] Error loading localStorage:', e);
@@ -157,6 +164,119 @@ class InventoryService {
     });
 
     return { success: true, updatedItem: item };
+  }
+
+  // Atomic Multi-Item Batch Adjustment for Document Imports (BUY / SELL)
+  public applyBatchAdjustment(
+    businessId: string,
+    adjustments: Array<{
+      productId: string;
+      productName?: string;
+      delta: number;
+      type: InventoryMovement['type'];
+      unitCost?: number;
+      sellingPrice?: number;
+      reason: string;
+      referenceId?: string;
+    }>,
+    idempotencyKey?: string
+  ): { success: boolean; error?: string; updatedItems?: InventoryItem[]; movements?: InventoryMovement[] } {
+    if (idempotencyKey && this.appliedIdempotencyKeys.has(idempotencyKey)) {
+      return {
+        success: false,
+        error: `Duplicate submission prevented: document already imported with idempotency key "${idempotencyKey}".`
+      };
+    }
+
+    // 1. Dry-run validation: check EVERY item before changing any stock
+    const plannedUpdates: Array<{
+      item: InventoryItem;
+      newPhysical: number;
+      delta: number;
+      adj: typeof adjustments[0];
+    }> = [];
+
+    for (const adj of adjustments) {
+      const item = this.getItem(businessId, adj.productId);
+      if (!item) {
+        return {
+          success: false,
+          error: `Cannot apply batch update: product "${adj.productName || adj.productId}" not found in inventory.`
+        };
+      }
+
+      const newPhysical = item.stock.physicalStock + adj.delta;
+      if (newPhysical < 0) {
+        return {
+          success: false,
+          error: `Cannot reduce inventory for "${item.nameEn}" by ${Math.abs(adj.delta)} ${item.unit}. Available physical stock (${item.stock.physicalStock} ${item.unit}) is insufficient.`
+        };
+      }
+
+      if (newPhysical < item.stock.reservedStock) {
+        return {
+          success: false,
+          error: `Cannot reduce inventory for "${item.nameEn}" to ${newPhysical} ${item.unit} because ${item.stock.reservedStock} ${item.unit} is reserved for active P2P trade inquiries.`
+        };
+      }
+
+      plannedUpdates.push({ item, newPhysical, delta: adj.delta, adj });
+    }
+
+    // 2. All validations passed: apply updates atomically
+    const updatedItems: InventoryItem[] = [];
+    const recordedMovements: InventoryMovement[] = [];
+
+    for (const { item, newPhysical, delta, adj } of plannedUpdates) {
+      const previousPhysical = item.stock.physicalStock;
+      item.stock.physicalStock = newPhysical;
+      item.stock.availableStock = Math.max(0, newPhysical - item.stock.reservedStock);
+
+      if (adj.delta > 0 && adj.unitCost && adj.unitCost > 0) {
+        item.purchaseCost = adj.unitCost;
+      }
+      if (adj.sellingPrice && adj.sellingPrice > 0) {
+        item.sellingPrice = adj.sellingPrice;
+      }
+
+      if (item.stock.availableStock === 0) item.status = 'out_of_stock';
+      else if (item.stock.availableStock <= item.reorderThreshold) item.status = 'low_stock';
+      else item.status = 'in_stock';
+
+      this.saveItem(businessId, item);
+      updatedItems.push(item);
+
+      const movement: InventoryMovement = {
+        id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        businessId,
+        productId: item.id,
+        productName: item.nameEn,
+        type: adj.type,
+        quantityChange: delta,
+        unit: item.unit,
+        previousPhysicalStock: previousPhysical,
+        newPhysicalStock: newPhysical,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        reason: adj.reason,
+        referenceId: adj.referenceId,
+      };
+
+      this.recordMovement(movement);
+      recordedMovements.push(movement);
+    }
+
+    if (idempotencyKey) {
+      this.appliedIdempotencyKeys.add(idempotencyKey);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(STORAGE_KEY_IDEMPOTENCY, JSON.stringify([...this.appliedIdempotencyKeys]));
+        } catch (e) {
+          console.warn('[InventoryService] Error saving idempotency keys:', e);
+        }
+      }
+    }
+
+    return { success: true, updatedItems, movements: recordedMovements };
   }
 
   // Safe Reservation for P2P Marketplace

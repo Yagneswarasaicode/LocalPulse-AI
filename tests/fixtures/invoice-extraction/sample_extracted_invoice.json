@@ -1,0 +1,50 @@
+{
+  "sample_data": true,
+  "supplier": "Sri Lakshmi Wholesale Suppliers",
+  "invoice_number": "SL/2025/0143",
+  "invoice_date": "2025-01-24",
+  "buyer": "Ramana Kirana Store",
+  "currency": "INR",
+  "items": [
+    {
+      "product": "Rice",
+      "quantity": 50,
+      "unit": "kg",
+      "unit_price": 42,
+      "line_total": 2100
+    },
+    {
+      "product": "Toor Dal",
+      "quantity": 10,
+      "unit": "kg",
+      "unit_price": 120,
+      "line_total": 1200
+    },
+    {
+      "product": "Sugar",
+      "quantity": 25,
+      "unit": "kg",
+      "unit_price": 40,
+      "line_total": 1000
+    },
+    {
+      "product": "Sunflower Oil",
+      "quantity": 5,
+      "unit": "L",
+      "unit_price": 150,
+      "line_total": 750
+    },
+    {
+      "product": "Salt",
+      "quantity": 10,
+      "unit": "kg",
+      "unit_price": 14,
+      "line_total": 140
+    }
+  ],
+  "subtotal": 5190,
+  "tax_rate_example": 0.05,
+  "tax": 259.5,
+  "total": 5449.5,
+  "note": "Synthetic demonstration invoice. Tax is illustrative, not tax advice. Review all extracted fields before import."
+}
