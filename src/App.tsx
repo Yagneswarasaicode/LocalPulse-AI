@@ -3,7 +3,8 @@ import {
   VegetableItem, 
   ActiveScreen, 
   Language, 
-  ProcurementPlan 
+  ProcurementPlan,
+  WorkspaceTab
 } from './types';
 import { INITIAL_SAMPLE_VEGETABLES, DEFAULT_BUDGET } from './sampleData';
 import { calculateProcurementPlan } from './utils/procurementMath';
@@ -14,14 +15,28 @@ import { AICopilotScreen } from './components/AICopilotScreen';
 import { AboutScreen } from './components/AboutScreen';
 import { VoiceModal } from './components/VoiceModal';
 import { PhotoScanModal } from './components/PhotoScanModal';
+import { SupermarketWorkspace } from './components/supermarket/SupermarketWorkspace';
+import { P2PWorkspace } from './components/p2p/P2PWorkspace';
 import { Sparkles, MapPin, CheckCircle2 } from 'lucide-react';
 
 const STORAGE_KEY_ITEMS = 'localpulse_vegetables_v1';
 const STORAGE_KEY_BUDGET = 'localpulse_budget_v1';
 const STORAGE_KEY_LANG = 'localpulse_lang_v1';
+const STORAGE_KEY_WORKSPACE = 'localpulse_active_workspace_v1';
 
 export const App: React.FC = () => {
-  // Load state from localStorage or use initial defaults
+  // Active Workspace Tab (Vendor | Supermarket | P2P Local Market)
+  const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceTab>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_WORKSPACE);
+      if (saved === 'vendor' || saved === 'supermarket' || saved === 'p2p') return saved;
+    } catch (e) {
+      console.warn('Could not read active workspace from localStorage:', e);
+    }
+    return 'vendor';
+  });
+
+  // Load Vendor state from localStorage or use initial defaults (100% Preserved)
   const [items, setItems] = useState<VegetableItem[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
@@ -58,12 +73,20 @@ export const App: React.FC = () => {
     return 'en';
   });
 
-  const [currentScreen, setCurrentScreen] = useState<ActiveScreen>('morning-check');
+  const [vendorScreen, setVendorScreen] = useState<ActiveScreen>('morning-check');
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Sync to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_WORKSPACE, activeWorkspace);
+    } catch (e) {
+      console.warn('Failed saving active workspace:', e);
+    }
+  }, [activeWorkspace]);
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
@@ -88,7 +111,7 @@ export const App: React.FC = () => {
     }
   }, [language]);
 
-  // Reactive Procurement Plan Math
+  // Reactive Procurement Plan Math (Preserved Vendor Optimizer)
   const plan: ProcurementPlan = useMemo(() => {
     return calculateProcurementPlan(items, budget);
   }, [items, budget]);
@@ -98,7 +121,7 @@ export const App: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Item Update Handlers
+  // Vendor Item Update Handlers
   const handleUpdateItem = (id: string, field: keyof VegetableItem, value: number | string) => {
     setItems(prev => prev.map(item => {
       if (item.id === id) {
@@ -160,74 +183,98 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-bg text-navy-900 selection:bg-emerald-500 selection:text-white">
-      {/* Top Navbar */}
+      {/* Top Navbar with EXACTLY THREE MAIN TABS */}
       <Navbar
-        currentScreen={currentScreen}
-        onNavigate={(screen) => {
-          setCurrentScreen(screen);
+        activeWorkspace={activeWorkspace}
+        onSelectWorkspace={(ws) => {
+          setActiveWorkspace(ws);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        vendorScreen={vendorScreen}
+        onSelectVendorScreen={(screen) => {
+          setVendorScreen(screen);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         language={language}
         onToggleLanguage={setLanguage}
-        budget={budget}
+        vendorBudget={budget}
       />
 
-      {/* Main Screen Content Container */}
+      {/* Main Workspace Content Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-        {currentScreen === 'morning-check' && (
-          <MorningCheckScreen
-            items={items}
-            budget={budget}
-            onBudgetChange={setBudget}
-            onUpdateItem={handleUpdateItem}
-            onAddItem={handleAddItem}
-            onDeleteItem={handleDeleteItem}
-            onResetToSample={handleResetToSample}
-            onClearData={handleClearData}
-            onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
-            onOpenPhotoModal={() => setIsPhotoModalOpen(true)}
-            onGeneratePlan={() => {
-              setCurrentScreen('smart-plan');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+        {/* WORKSPACE 1: VENDOR (100% PRESERVED) */}
+        {activeWorkspace === 'vendor' && (
+          <>
+            {vendorScreen === 'morning-check' && (
+              <MorningCheckScreen
+                items={items}
+                budget={budget}
+                onBudgetChange={setBudget}
+                onUpdateItem={handleUpdateItem}
+                onAddItem={handleAddItem}
+                onDeleteItem={handleDeleteItem}
+                onResetToSample={handleResetToSample}
+                onClearData={handleClearData}
+                onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
+                onOpenPhotoModal={() => setIsPhotoModalOpen(true)}
+                onGeneratePlan={() => {
+                  setVendorScreen('smart-plan');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                language={language}
+              />
+            )}
+
+            {vendorScreen === 'smart-plan' && (
+              <SmartPlanScreen
+                plan={plan}
+                onNavigateToCopilot={() => {
+                  setVendorScreen('ai-copilot');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onRecalculate={() => {
+                  setVendorScreen('morning-check');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                language={language}
+              />
+            )}
+
+            {vendorScreen === 'ai-copilot' && (
+              <AICopilotScreen
+                plan={plan}
+                onRecalculatePlan={() => {
+                  setVendorScreen('morning-check');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                language={language}
+              />
+            )}
+
+            {vendorScreen === 'about' && (
+              <AboutScreen
+                onClearData={handleClearData}
+                onResetToSample={handleResetToSample}
+                onGeneratePlan={() => {
+                  setVendorScreen('morning-check');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                language={language}
+              />
+            )}
+          </>
+        )}
+
+        {/* WORKSPACE 2: SUPERMARKET (NEW ENTERPRISE SUITE) */}
+        {activeWorkspace === 'supermarket' && (
+          <SupermarketWorkspace
             language={language}
           />
         )}
 
-        {currentScreen === 'smart-plan' && (
-          <SmartPlanScreen
-            plan={plan}
-            onNavigateToCopilot={() => {
-              setCurrentScreen('ai-copilot');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            onRecalculate={() => {
-              setCurrentScreen('morning-check');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            language={language}
-          />
-        )}
-
-        {currentScreen === 'ai-copilot' && (
-          <AICopilotScreen
-            plan={plan}
-            onRecalculatePlan={() => {
-              setCurrentScreen('morning-check');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            language={language}
-          />
-        )}
-
-        {currentScreen === 'about' && (
-          <AboutScreen
-            onClearData={handleClearData}
-            onResetToSample={handleResetToSample}
-            onGeneratePlan={() => {
-              setCurrentScreen('morning-check');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+        {/* WORKSPACE 3: P2P LOCAL MARKET (NEW SURPLUS RECOVERY) */}
+        {activeWorkspace === 'p2p' && (
+          <P2PWorkspace
             language={language}
           />
         )}
@@ -241,7 +288,7 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Telugu Voice Modal */}
+      {/* Telugu Voice Modal (Vendor) */}
       <VoiceModal
         isOpen={isVoiceModalOpen}
         onClose={() => setIsVoiceModalOpen(false)}
@@ -249,7 +296,7 @@ export const App: React.FC = () => {
         language={language}
       />
 
-      {/* Photo Vision Scan Modal */}
+      {/* Photo Vision Scan Modal (Vendor) */}
       <PhotoScanModal
         isOpen={isPhotoModalOpen}
         onClose={() => setIsPhotoModalOpen(false)}

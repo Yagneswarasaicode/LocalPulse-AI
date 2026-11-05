@@ -1,4 +1,4 @@
-import { VegetableItem } from './types';
+import { VegetableItem } from './types.ts';
 
 export const INITIAL_SAMPLE_VEGETABLES: VegetableItem[] = [
   {

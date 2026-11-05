@@ -8,7 +8,8 @@
     "client": "vite --host 0.0.0.0 --port 5173",
     "server": "node server.js",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "esbuild tests/platform.test.ts --bundle --platform=node --outfile=tests/dist/platform.test.cjs && node tests/dist/platform.test.cjs"
   },
   "dependencies": {
     "@esbuild/win32-x64": "^0.28.2",

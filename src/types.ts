@@ -1,3 +1,9 @@
+// Re-export all sub-domain models
+export * from './types/shared.ts';
+export * from './types/supermarket.ts';
+export * from './types/p2p.ts';
+
+// Existing Vendor Types (100% Preserved for Backward Compatibility)
 export type PriorityLevel = 'HIGH' | 'MED' | 'SKIP';
 
 export interface VegetableItem {
@@ -70,3 +76,4 @@ export interface GeminiExplanationResponse {
 
 export type ActiveScreen = 'morning-check' | 'smart-plan' | 'ai-copilot' | 'about';
 export type Language = 'en' | 'te';
+export type WorkspaceTab = 'vendor' | 'supermarket' | 'p2p';

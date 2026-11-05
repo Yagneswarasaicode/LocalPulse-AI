@@ -2,18 +2,43 @@
 
 export const translations = {
   en: {
-    // Top Bar & Branding
+    // Top Bar & Workspace Tabs
     appName: "LocalPulse AI",
     oneLinePromise: "Buy Smarter. Waste Less. Earn More.",
-    tagline: "Morning Vegetable Procurement Assistant for Vizag Street Vendors",
+    tagline: "Morning Procurement & Hyperlocal Surplus Recovery Platform",
     location: "Poorna Market & MVP Rythu Bazaar, Visakhapatnam",
     team: "VECTORX",
 
-    // Navigation Tabs
+    // Main Workspace Tabs
+    tabVendor: "Vendor",
+    tabSupermarket: "Supermarket",
+    tabP2P: "P2P Local Market",
+    activeWorkspaceBadge: "Active Workspace",
+
+    // Navigation Tabs - Vendor
     navMorningCheck: "Morning Check",
     navSmartPlan: "Smart Purchase Plan",
     navAICopilot: "AI Copilot Chat",
     navAbout: "About & Mission",
+
+    // Navigation Tabs - Supermarket
+    navSmOverview: "Overview",
+    navSmInventory: "Inventory",
+    navSmImports: "Import Documents",
+    navSmSales: "Sales & History",
+    navSmProcurement: "Smart Procurement",
+    navSmAnalytics: "Analytics",
+    navSmCopilot: "AI Copilot",
+    navSmSuppliers: "Suppliers",
+
+    // Navigation Tabs - P2P
+    navP2PDiscover: "Discover Nearby",
+    navP2PSurplus: "AI Surplus Suggestions",
+    navP2PSell: "Sell Stock",
+    navP2PMyListings: "My Listings",
+    navP2PInquiries: "Buy Requests",
+    navP2PTrades: "Trade History",
+    navP2PInsights: "Market Insights",
 
     // Primary CTA Button
     generatePlanBtn: "Generate Budget-Safe Morning Purchase Plan",
@@ -119,18 +144,43 @@ export const translations = {
     clearDataConfirm: "Are you sure you want to clear your saved data? This will reset the app to the default sample records.",
   },
   te: {
-    // Top Bar & Branding
+    // Top Bar & Workspace Tabs
     appName: "లోకల్‌పల్స్ AI",
     oneLinePromise: "తెలివిగా కొనండి. నష్టాన్ని తగ్గించండి. ఎక్కువ సంపాదించండి.",
-    tagline: "వైజాగ్ వీధి వ్యాపారుల కోసం ఉదయపు కూరగాయల కొనుగోలు సహాయకుడు",
+    tagline: "ఉదయపు కొనుగోలు & స్థానిక మిగులు రికవరీ ప్లాట్‌ఫారమ్",
     location: "పూర్ణా మార్కెట్ & MVP రైతు బజార్, విశాఖపట్నం",
     team: "టీమ్ VECTORX",
 
-    // Navigation Tabs
+    // Main Workspace Tabs
+    tabVendor: "వీధి వ్యాపారి (Vendor)",
+    tabSupermarket: "సూపర్‌మార్కెట్",
+    tabP2P: "P2P లోకల్ మార్కెట్",
+    activeWorkspaceBadge: "ప్రస్తుత విభాగం",
+
+    // Navigation Tabs - Vendor
     navMorningCheck: "ఉదయపు చెక్ (Morning Check)",
     navSmartPlan: "స్మార్ట్ కొనుగోలు ప్లాన్",
     navAICopilot: "AI కోపైలట్ చాట్",
     navAbout: "వివరాలు & లక్ష్యం (About)",
+
+    // Navigation Tabs - Supermarket
+    navSmOverview: "సారాంశం (Overview)",
+    navSmInventory: "ఇన్వెంటరీ నిల్వలు",
+    navSmImports: "డాక్యుమెంట్ ఇంపోర్ట్",
+    navSmSales: "అమ్మకాల చరిత్ర",
+    navSmProcurement: "స్మార్ట్ ప్రొక్యూర్మెంట్",
+    navSmAnalytics: "గణాంకాలు",
+    navSmCopilot: "AI కోపైలట్",
+    navSmSuppliers: "సప్లయర్లు",
+
+    // Navigation Tabs - P2P
+    navP2PDiscover: "సమీప ఆఫర్లు (Discover)",
+    navP2PSurplus: "AI మిగులు సూచనలు",
+    navP2PSell: "స్టాక్ అమ్మండి (Sell)",
+    navP2PMyListings: "నా లిస్టింగ్‌లు",
+    navP2PInquiries: "కొనుగోలు అభ్యర్థనలు",
+    navP2PTrades: "ట్రేడ్ హిస్టరీ",
+    navP2PInsights: "మార్కెట్ సూచనలు",
 
     // Primary CTA Button
     generatePlanBtn: "బడ్జెట్-సేఫ్ ఉదయపు కొనుగోలు ప్లాన్ లెక్కించండి",

@@ -1,4 +1,4 @@
-import { VegetableItem, PurchaseRecommendation, ProcurementPlan, PriorityLevel } from '../types';
+import { VegetableItem, PurchaseRecommendation, ProcurementPlan, PriorityLevel } from '../types.ts';
 
 export function calculateProcurementPlan(
   items: VegetableItem[],
