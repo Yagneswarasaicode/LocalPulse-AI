@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    background-color: #F7F9FC;
+    color: #10213A;
+    font-family: 'Inter', 'Noto Sans Telugu', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Accessible focus indicators */
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid #008F80;
+    outline-offset: 2px;
+  }
+}
+
+/* Custom scrollbars and utility animations */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 3s ease-in-out infinite;
+}
+
+/* Telugu font fallback refinement */
+.telugu-text {
+  font-family: 'Noto Sans Telugu', 'Inter', sans-serif;
+  line-height: 1.6;
+}
