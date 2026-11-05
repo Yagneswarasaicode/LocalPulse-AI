@@ -185,7 +185,8 @@ class HolidayService {
 
     return {
       success: true,
-      status: 'LIVE',
+      status: 'LOCAL_VERIFIED',
+      sourceType: 'local_statutory_registry',
       year: 2026,
       region: 'Andhra Pradesh & National',
       authorities: [

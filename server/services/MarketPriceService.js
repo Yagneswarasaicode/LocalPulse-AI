@@ -2,11 +2,10 @@ import { config } from '../config.js';
 import { cacheService } from './CacheService.js';
 
 /**
- * Verified official Visakhapatnam Mandi Historical Benchmark Records
- * Sourced from Agmarknet / AP Agriculture Marketing Board annual statistics.
- * Used strictly when live API is BLOCKED or UNAVAILABLE.
+ * Synthetic Demo Mandi Records for Visakhapatnam
+ * Classified strictly as DEMO_ONLY until live data.gov.in API key is provided.
  */
-const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
+const DEMO_VISAKHAPATNAM_BENCHMARKS = [
   {
     commodity: 'Tomato',
     commodityTe: 'టమాటాలు',
@@ -14,7 +13,7 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     market: 'Poorna Market, Visakhapatnam',
     district: 'Visakhapatnam',
     state: 'Andhra Pradesh',
-    arrivalDate: '2026-02-28',
+    observationDate: '2026-02-28',
     minPricePerQuintal: 2000,
     maxPricePerQuintal: 2800,
     modalPricePerQuintal: 2400,
@@ -23,8 +22,8 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     modalPricePerKg: 24.0,
     rawUnit: '₹/quintal',
     normalizedUnit: '₹/kg',
-    source: 'agmarknet_historical_bulletin_visakhapatnam',
-    isBenchmarkOnly: true,
+    source: 'demo_market_benchmark',
+    isDemoOnly: true,
   },
   {
     commodity: 'Onion',
@@ -33,7 +32,7 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     market: 'Poorna Market, Visakhapatnam',
     district: 'Visakhapatnam',
     state: 'Andhra Pradesh',
-    arrivalDate: '2026-02-28',
+    observationDate: '2026-02-28',
     minPricePerQuintal: 2600,
     maxPricePerQuintal: 3400,
     modalPricePerQuintal: 3000,
@@ -42,8 +41,8 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     modalPricePerKg: 30.0,
     rawUnit: '₹/quintal',
     normalizedUnit: '₹/kg',
-    source: 'agmarknet_historical_bulletin_visakhapatnam',
-    isBenchmarkOnly: true,
+    source: 'demo_market_benchmark',
+    isDemoOnly: true,
   },
   {
     commodity: 'Potato',
@@ -52,7 +51,7 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     market: 'MVP Rythu Bazaar, Visakhapatnam',
     district: 'Visakhapatnam',
     state: 'Andhra Pradesh',
-    arrivalDate: '2026-02-28',
+    observationDate: '2026-02-28',
     minPricePerQuintal: 2200,
     maxPricePerQuintal: 2800,
     modalPricePerQuintal: 2500,
@@ -61,8 +60,8 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     modalPricePerKg: 25.0,
     rawUnit: '₹/quintal',
     normalizedUnit: '₹/kg',
-    source: 'agmarknet_historical_bulletin_visakhapatnam',
-    isBenchmarkOnly: true,
+    source: 'demo_market_benchmark',
+    isDemoOnly: true,
   },
   {
     commodity: 'Green Chilli',
@@ -71,7 +70,7 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     market: 'Poorna Market, Visakhapatnam',
     district: 'Visakhapatnam',
     state: 'Andhra Pradesh',
-    arrivalDate: '2026-02-28',
+    observationDate: '2026-02-28',
     minPricePerQuintal: 4500,
     maxPricePerQuintal: 6000,
     modalPricePerQuintal: 5000,
@@ -80,8 +79,8 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     modalPricePerKg: 50.0,
     rawUnit: '₹/quintal',
     normalizedUnit: '₹/kg',
-    source: 'agmarknet_historical_bulletin_visakhapatnam',
-    isBenchmarkOnly: true,
+    source: 'demo_market_benchmark',
+    isDemoOnly: true,
   },
   {
     commodity: 'Brinjal',
@@ -90,7 +89,7 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     market: 'MVP Rythu Bazaar, Visakhapatnam',
     district: 'Visakhapatnam',
     state: 'Andhra Pradesh',
-    arrivalDate: '2026-02-28',
+    observationDate: '2026-02-28',
     minPricePerQuintal: 1800,
     maxPricePerQuintal: 2400,
     modalPricePerQuintal: 2000,
@@ -99,8 +98,8 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     modalPricePerKg: 20.0,
     rawUnit: '₹/quintal',
     normalizedUnit: '₹/kg',
-    source: 'agmarknet_historical_bulletin_visakhapatnam',
-    isBenchmarkOnly: true,
+    source: 'demo_market_benchmark',
+    isDemoOnly: true,
   },
   {
     commodity: 'Ladies Finger',
@@ -109,7 +108,7 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     market: 'MVP Rythu Bazaar, Visakhapatnam',
     district: 'Visakhapatnam',
     state: 'Andhra Pradesh',
-    arrivalDate: '2026-02-28',
+    observationDate: '2026-02-28',
     minPricePerQuintal: 2400,
     maxPricePerQuintal: 3200,
     modalPricePerQuintal: 2800,
@@ -118,8 +117,8 @@ const VERIFIED_VISAKHAPATNAM_BENCHMARKS = [
     modalPricePerKg: 28.0,
     rawUnit: '₹/quintal',
     normalizedUnit: '₹/kg',
-    source: 'agmarknet_historical_bulletin_visakhapatnam',
-    isBenchmarkOnly: true,
+    source: 'demo_market_benchmark',
+    isDemoOnly: true,
   },
 ];
 
@@ -151,7 +150,7 @@ class MarketPriceService {
 
     // Check if API key is configured
     if (!apiKey || apiKey.trim().length === 0) {
-      let filtered = VERIFIED_VISAKHAPATNAM_BENCHMARKS;
+      let filtered = DEMO_VISAKHAPATNAM_BENCHMARKS;
       if (commodity) {
         filtered = filtered.filter(
           item => item.commodity.toLowerCase().includes(commodity.toLowerCase())
@@ -163,9 +162,9 @@ class MarketPriceService {
         status: 'BLOCKED',
         provider: 'data.gov.in (AGMARKNET)',
         resourceId: this.resourceId,
-        message: 'DATA_GOV_IN_API_KEY is not configured in backend .env. Live government endpoint is blocked. Serving verified Visakhapatnam historical market benchmarks.',
+        message: 'DATA_GOV_IN_API_KEY is not configured in backend .env. Live government endpoint is blocked. Serving DEMO_ONLY price benchmarks for Visakhapatnam.',
         data: filtered,
-        isBenchmarkOnly: true,
+        isDemoOnly: true,
         retrievedAt: new Date().toISOString(),
       };
     }

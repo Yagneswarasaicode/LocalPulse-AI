@@ -87,8 +87,8 @@ async function runTests() {
   assert(mandiRes.success === true, 'Mandi service returns successful response structure');
   if (!config.dataGovApiKey) {
     assert(mandiRes.status === 'BLOCKED', 'Returns status BLOCKED when DATA_GOV_IN_API_KEY is not configured');
-    assert(mandiRes.isBenchmarkOnly === true, 'Flags records explicitly as isBenchmarkOnly: true');
-    assert(mandiRes.data.length >= 6, `Returns verified historical Poorna Market benchmark records (Count: ${mandiRes.data.length})`);
+    assert(mandiRes.isDemoOnly === true, 'Flags records explicitly as isDemoOnly: true (DEMO_ONLY)');
+    assert(mandiRes.data.length >= 6, `Returns synthetic Poorna Market demo benchmark records (Count: ${mandiRes.data.length})`);
     const tomato = mandiRes.data.find(d => d.commodity === 'Tomato');
     assert(Boolean(tomato && tomato.modalPricePerKg === 24.0), 'Poorna Market Tomato benchmark is ₹24.0/kg');
     assert(tomato.rawUnit === '₹/quintal' && tomato.normalizedUnit === '₹/kg', 'Retains original and normalized unit metadata');
@@ -119,7 +119,7 @@ async function runTests() {
   // 6. OFFICIAL 2026 HOLIDAY CALENDAR TESTS
   console.log('\nSuite 6: Official Indian Central & Andhra Pradesh Holiday Calendar (2026)');
   const holidaysRes = holidayService.getHolidays(2026, 'AP');
-  assert(holidaysRes.success === true && holidaysRes.status === 'LIVE', 'Holiday service returns status LIVE for verified 2026 calendar');
+  assert(holidaysRes.success === true && holidaysRes.status === 'LOCAL_VERIFIED', 'Holiday service returns status LOCAL_VERIFIED for statutory 2026 calendar');
   assert(holidaysRes.year === 2026, 'Year verified as 2026');
   assert(holidaysRes.totalHolidays >= 12, `Contains verified official holidays (Total: ${holidaysRes.totalHolidays})`);
 
