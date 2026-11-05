@@ -49,9 +49,10 @@ async function runStage2_4ATests() {
     assert(invIndex, 'Inventory index must be defined');
   });
 
-  await test('.env.example documents verified project ID localpulse-ai-a990f and intentional emulator controls', () => {
+  await test('.env.example documents verified project ID localpulse-ai-a990f, exact Storage bucket and intentional emulator controls', () => {
     const envExample = fs.readFileSync('.env.example', 'utf-8');
     assert(envExample.includes('localpulse-ai-a990f'), 'Must document production project ID localpulse-ai-a990f');
+    assert(envExample.includes('localpulse-ai-a990f.firebasestorage.app'), 'Must document exact Storage bucket localpulse-ai-a990f.firebasestorage.app');
     assert(envExample.includes('USE_FIREBASE_EMULATOR'), 'Must document USE_FIREBASE_EMULATOR toggle');
     assert(envExample.includes('VITE_USE_FIREBASE_EMULATOR'), 'Must document VITE_USE_FIREBASE_EMULATOR toggle');
     assert(envExample.includes('FIRESTORE_EMULATOR_HOST'), 'Must document FIRESTORE_EMULATOR_HOST');
@@ -60,19 +61,21 @@ async function runStage2_4ATests() {
   // Suite 2: Firebase Client & Admin Initialization Modules
   console.log('\nSuite 2: Firebase Initialization Modules');
 
-  await test('src/config/firebase.ts configures localpulse-ai-a990f and intentional emulator connectivity', () => {
+  await test('src/config/firebase.ts configures localpulse-ai-a990f, exact firebasestorage.app bucket and intentional emulator connectivity', () => {
     assert(fs.existsSync('src/config/firebase.ts'), 'src/config/firebase.ts should exist');
     const clientCode = fs.readFileSync('src/config/firebase.ts', 'utf-8');
     assert(clientCode.includes('localpulse-ai-a990f'), 'Must configure production project localpulse-ai-a990f');
+    assert(clientCode.includes('localpulse-ai-a990f.firebasestorage.app'), 'Must configure exact Storage bucket localpulse-ai-a990f.firebasestorage.app');
     assert(clientCode.includes('connectFirestoreEmulator'), 'Must support Firestore emulator');
     assert(clientCode.includes('connectAuthEmulator'), 'Must support Auth emulator');
     assert(clientCode.includes('connectStorageEmulator'), 'Must support Storage emulator');
   });
 
-  await test('server/services/FirebaseAdmin.js configures localpulse-ai-a990f and exports initialization functions', () => {
+  await test('server/services/FirebaseAdmin.js configures localpulse-ai-a990f, exact firebasestorage.app bucket and exports initialization functions', () => {
     assert(fs.existsSync('server/services/FirebaseAdmin.js'), 'server/services/FirebaseAdmin.js should exist');
     const adminCode = fs.readFileSync('server/services/FirebaseAdmin.js', 'utf-8');
     assert(adminCode.includes('localpulse-ai-a990f'), 'Must configure production project localpulse-ai-a990f');
+    assert(adminCode.includes('localpulse-ai-a990f.firebasestorage.app'), 'Must configure exact Storage bucket localpulse-ai-a990f.firebasestorage.app');
     assert(adminCode.includes('initializeFirebaseAdmin'), 'Must export initializeFirebaseAdmin');
     assert(adminCode.includes('getAdminStatus'), 'Must export getAdminStatus');
   });

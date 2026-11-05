@@ -5,12 +5,13 @@ import { getStorage, connectStorageEmulator } from 'firebase/storage';
 
 // Production Firebase Configuration for LocalPulse AI (localpulse-ai-a990f)
 const PRODUCTION_PROJECT_ID = 'localpulse-ai-a990f';
+const PRODUCTION_STORAGE_BUCKET = 'localpulse-ai-a990f.firebasestorage.app';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyDemoDummyKeyForLocalPulse12345',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PRODUCTION_PROJECT_ID}.firebaseapp.com`,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || PRODUCTION_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PRODUCTION_PROJECT_ID}.appspot.com`,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || PRODUCTION_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789012:web:abcdef123456',
 };
