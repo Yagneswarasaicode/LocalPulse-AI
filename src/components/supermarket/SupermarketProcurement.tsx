@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SupermarketProcurementPlan, Language } from '../../types';
 import { procurementService } from '../../services/ProcurementService';
+import { translations } from '../../translations';
 import { 
   Sparkles, 
   ShieldCheck, 
@@ -10,7 +11,9 @@ import {
   Scale, 
   Truck, 
   FileText, 
-  Check 
+  Check,
+  TrendingDown,
+  Info
 } from 'lucide-react';
 
 interface SupermarketProcurementProps {
@@ -22,12 +25,39 @@ export const SupermarketProcurement: React.FC<SupermarketProcurementProps> = ({
   businessId,
   language,
 }) => {
+  const t = translations[language];
   const [budget, setBudget] = useState(25000);
   const [horizonDays, setHorizonDays] = useState(7);
   const [copiedPO, setCopiedPO] = useState(false);
 
+  // Stage 2.3: Mandi Price Benchmark State
+  const [mandiBenchmarks, setMandiBenchmarks] = useState<any[]>([]);
+  const [mandiStatus, setMandiStatus] = useState<'LOADING' | 'LIVE' | 'BLOCKED' | 'UNAVAILABLE'>('LOADING');
+
+  useEffect(() => {
+    const fetchMandi = async () => {
+      try {
+        const res = await fetch('/api/mandi?district=Visakhapatnam');
+        const json = await res.json();
+        if (json && Array.isArray(json.data)) {
+          setMandiBenchmarks(json.data);
+          setMandiStatus(json.status || 'BLOCKED');
+        }
+      } catch {
+        setMandiStatus('UNAVAILABLE');
+      }
+    };
+    fetchMandi();
+  }, []);
+
   const plan = procurementService.calculateSupermarketPlan(businessId, budget, horizonDays);
   const buyItems = plan.recommendations.filter(r => r.suggestedReorderQty > 0);
+
+  // Helper to find matching mandi benchmark for a product
+  const getMandiBenchmark = (productName: string) => {
+    const lower = productName.toLowerCase();
+    return mandiBenchmarks.find(m => lower.includes(m.commodity.toLowerCase()));
+  };
 
   const handleExportPO = () => {
     const lines = [
@@ -156,6 +186,32 @@ export const SupermarketProcurement: React.FC<SupermarketProcurementProps> = ({
         </div>
       )}
 
+      {/* STAGE 2.3: MANDI PRICE BENCHMARK REFERENCE STRIP */}
+      <div className="p-4 bg-navy-50/70 border border-navy-200 rounded-2xl text-xs text-navy-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-start gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-white border border-navy-200 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+            <TrendingDown className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-navy-900 text-sm">
+                Poorna Market Wholesale Price Benchmarks
+              </span>
+              <span className="text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.2 rounded-full font-mono uppercase">
+                ● {mandiStatus === 'BLOCKED' ? 'DEMO BENCHMARK' : mandiStatus}
+              </span>
+            </div>
+            <p className="text-[11px] text-navy-600 mt-0.5">
+              Wholesale benchmark rates for fresh produce. Optimization math strictly honors your contracted supplier prices. Benchmarks are advisory context for supplier rate negotiations.
+            </p>
+          </div>
+        </div>
+
+        <div className="text-[11px] font-mono text-navy-500 shrink-0 bg-white px-3 py-1.5 rounded-xl border border-navy-200">
+          Source: {mandiStatus === 'BLOCKED' ? 'Poorna Market Reference' : 'Live AGMARKNET'}
+        </div>
+      </div>
+
       {/* Recommendations Table */}
       <div className="bg-surface-card rounded-2xl border border-surface-border shadow-card overflow-hidden">
         <div className="p-5 border-b border-surface-border flex items-center justify-between">
@@ -193,6 +249,20 @@ export const SupermarketProcurement: React.FC<SupermarketProcurementProps> = ({
                       <div className="text-[11px] text-navy-400 font-mono font-normal">
                         {rec.product.sku}
                       </div>
+                      {(() => {
+                        const mandi = getMandiBenchmark(rec.product.nameEn);
+                        if (!mandi) return null;
+                        return (
+                          <div className="mt-1 flex items-center gap-1.5 text-[10px]">
+                            <span className="font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              Mandi Ref: ₹{mandi.modalPricePerKg}/{rec.product.unit}
+                            </span>
+                            <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1 rounded">
+                              DEMO
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </td>
                   <td className="py-3 px-3 font-mono">{rec.product.stock.availableStock} {rec.product.unit}</td>

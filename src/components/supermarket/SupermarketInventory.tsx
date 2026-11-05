@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { InventoryItem, ProductCategory, UnitOfMeasure, StorageCategory, Language } from '../../types';
 import { inventoryService } from '../../services/InventoryService';
+import { translations } from '../../translations';
 import { 
   Package, 
   Search, 
@@ -14,7 +15,12 @@ import {
   CheckCircle2, 
   RotateCcw,
   SlidersHorizontal,
-  X
+  X,
+  Barcode,
+  Camera,
+  Loader2,
+  Info,
+  ExternalLink
 } from 'lucide-react';
 
 interface SupermarketInventoryProps {
@@ -26,6 +32,7 @@ export const SupermarketInventory: React.FC<SupermarketInventoryProps> = ({
   businessId,
   language,
 }) => {
+  const t = translations[language];
   const [items, setItems] = useState<InventoryItem[]>(() => inventoryService.getInventory(businessId));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -39,6 +46,26 @@ export const SupermarketInventory: React.FC<SupermarketInventoryProps> = ({
   const [adjustmentReason, setAdjustmentReason] = useState<string>('');
   const [adjustmentError, setAdjustmentError] = useState<string>('');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Barcode lookup & review modal states
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [isBarcodeLoading, setIsBarcodeLoading] = useState(false);
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  
+  // Product review state from Open Food Facts
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [reviewedCatalogProduct, setReviewedCatalogProduct] = useState<any>(null);
+  const [reviewFields, setReviewFields] = useState({
+    purchaseCost: 35,
+    sellingPrice: 50,
+    physicalStock: 25,
+    reorderThreshold: 10,
+    safetyStock: 5,
+    supplier: 'Vizag Mandi Wholesale Consortium',
+  });
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
   // New item form state
   const [newItem, setNewItem] = useState<Partial<InventoryItem>>({
@@ -161,6 +188,121 @@ export const SupermarketInventory: React.FC<SupermarketInventoryProps> = ({
     }
   };
 
+  // Stage 2.3: Open Food Facts Barcode Lookup Handler
+  const handleBarcodeLookup = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanBarcode = barcodeInput.trim().replace(/[^0-9]/g, '');
+    if (!cleanBarcode || cleanBarcode.length < 8) {
+      setBarcodeError('Please enter a valid numerical barcode of at least 8 digits (e.g. 737628064502 or 8901030383701).');
+      return;
+    }
+
+    setIsBarcodeLoading(true);
+    setBarcodeError(null);
+
+    // Duplicate detection in local store
+    const existing = items.find(i => i.barcode === cleanBarcode || i.sku === cleanBarcode);
+    if (existing) {
+      setDuplicateWarning(`Warning: An item with this barcode already exists in your inventory: "${existing.nameEn}" (SKU: ${existing.sku}, Stock: ${existing.stock.physicalStock} ${existing.unit}).`);
+    } else {
+      setDuplicateWarning(null);
+    }
+
+    try {
+      const res = await fetch(`/api/product/barcode/${encodeURIComponent(cleanBarcode)}`);
+      const data = await res.json();
+
+      if (data.success && data.found && data.data) {
+        setReviewedCatalogProduct(data.data);
+        setReviewFields({
+          purchaseCost: 35,
+          sellingPrice: 50,
+          physicalStock: 20,
+          reorderThreshold: 10,
+          safetyStock: 5,
+          supplier: 'Vizag Mandi Wholesale Consortium',
+        });
+        setShowBarcodeModal(false);
+        setShowReviewModal(true);
+      } else {
+        setBarcodeError(data.message || 'Product barcode was not found in the Open Food Facts registry.');
+      }
+    } catch {
+      setBarcodeError('Network error connecting to barcode registry. You can create this product manually.');
+    } finally {
+      setIsBarcodeLoading(false);
+    }
+  };
+
+  // Stage 2.3: Save Confirmed Reviewed Product
+  const handleConfirmReviewedProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewedCatalogProduct) return;
+
+    const cost = Number(reviewFields.purchaseCost);
+    const price = Number(reviewFields.sellingPrice);
+    const stock = Number(reviewFields.physicalStock);
+    const reorder = Number(reviewFields.reorderThreshold);
+    const safety = Number(reviewFields.safetyStock);
+
+    if (cost < 0 || price < 0 || stock < 0) {
+      alert('Cost, price, and stock levels cannot be negative.');
+      return;
+    }
+
+    const newItemId = `sm-off-${Date.now()}`;
+    const itemToSave: InventoryItem = {
+      id: newItemId,
+      sku: `SKU-${reviewedCatalogProduct.barcode.slice(-6)}`,
+      nameEn: reviewedCatalogProduct.productName,
+      brand: reviewedCatalogProduct.brand,
+      barcode: reviewedCatalogProduct.barcode,
+      category: (reviewedCatalogProduct.category as ProductCategory) || 'Packaged food',
+      unit: 'pack',
+      packSize: 1,
+      isPerishable: false,
+      businessId,
+      stock: {
+        physicalStock: stock,
+        reservedStock: 0,
+        availableStock: stock,
+        incomingStock: 0,
+        damagedStock: 0,
+        expiredStock: 0,
+      },
+      reorderThreshold: reorder,
+      safetyStock: safety,
+      purchaseCost: cost,
+      sellingPrice: price,
+      storageCategory: 'dry_pantry',
+      lastCountedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      status: stock <= reorder ? 'low_stock' : 'in_stock',
+    };
+
+    inventoryService.saveItem(businessId, itemToSave);
+
+    // Audit stock movement for initial receipt
+    if (stock > 0) {
+      inventoryService.recordMovement({
+        id: `mov-init-${Date.now()}`,
+        businessId,
+        productId: newItemId,
+        productName: itemToSave.nameEn,
+        type: 'initial_count',
+        quantityChange: stock,
+        unit: 'pack',
+        previousPhysicalStock: 0,
+        newPhysicalStock: stock,
+        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 16),
+        reason: 'Initial stock received via Open Food Facts barcode lookup',
+      });
+    }
+
+    setShowReviewModal(false);
+    setReviewedCatalogProduct(null);
+    refreshItems();
+  };
+
   const movements = inventoryService.getMovements(businessId);
 
   return (
@@ -176,7 +318,19 @@ export const SupermarketInventory: React.FC<SupermarketInventoryProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            onClick={() => {
+              setBarcodeInput('');
+              setBarcodeError(null);
+              setDuplicateWarning(null);
+              setShowBarcodeModal(true);
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs transition-colors shadow-2xs"
+          >
+            <Barcode className="w-4 h-4 text-emerald-600" />
+            <span>{t.scanBarcode || 'Scan / Lookup Barcode'}</span>
+          </button>
           <button
             onClick={() => setShowHistoryModal(true)}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-navy-50 hover:bg-navy-100 text-navy-700 border border-navy-200 font-semibold text-xs transition-colors"
@@ -614,6 +768,341 @@ export const SupermarketInventory: React.FC<SupermarketInventoryProps> = ({
                   className="flex-1 py-2 text-xs font-bold rounded-xl bg-emerald-600 text-white shadow-xs"
                 >
                   Save Product
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* STAGE 2.3: BARCODE LOOKUP MODAL */}
+      {showBarcodeModal && (
+        <div className="fixed inset-0 z-50 bg-navy-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-surface-card rounded-3xl max-w-md w-full p-6 border border-surface-border shadow-elevated space-y-4">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base text-navy-900">
+                    {t.barcodeLookupTitle || 'Barcode Product Lookup'}
+                  </h3>
+                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded-full font-mono">
+                    ● LIVE
+                  </span>
+                </div>
+                <p className="text-xs text-navy-500 mt-0.5">
+                  Powered by Open Food Facts v3 public product registry.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowBarcodeModal(false);
+                  setIsCameraActive(false);
+                }}
+                className="p-1 rounded-lg text-navy-400 hover:text-navy-700 hover:bg-navy-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Test Barcode Presets */}
+            <div className="bg-navy-50 rounded-xl p-2.5 border border-navy-100 text-xs space-y-1">
+              <span className="text-[10px] uppercase font-bold text-navy-500 tracking-wider">Verified Test Barcodes:</span>
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setBarcodeInput('737628064502')}
+                  className="px-2 py-0.5 rounded bg-white border border-navy-200 text-navy-700 text-[11px] font-mono hover:border-emerald-500"
+                >
+                  737628064502 (Thai Noodle Kit)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBarcodeInput('8901030383701')}
+                  className="px-2 py-0.5 rounded bg-white border border-navy-200 text-navy-700 text-[11px] font-mono hover:border-emerald-500"
+                >
+                  8901030383701 (Tata Tea Gold)
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleBarcodeLookup} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-navy-700 block mb-1">
+                  Product Barcode (EAN-13, UPC, EAN-8)
+                </label>
+                <div className="relative">
+                  <Barcode className="w-4 h-4 text-navy-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    placeholder={t.barcodeInputPlaceholder || 'Enter 8-13 numerical digits...'}
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 text-xs sm:text-sm rounded-xl border border-navy-200 font-mono focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Camera Scanner Simulation / Trigger */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <div className="flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-navy-600" />
+                  <span className="font-semibold text-navy-700">Camera Barcode Scan</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCameraActive(!isCameraActive)}
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-800 underline"
+                >
+                  {isCameraActive ? 'Close Camera' : 'Toggle Camera'}
+                </button>
+              </div>
+
+              {isCameraActive && (
+                <div className="p-4 rounded-xl bg-navy-950 text-white text-center text-xs space-y-2 border border-navy-800">
+                  <p className="text-navy-300">Point device camera at product barcode:</p>
+                  <div className="w-full h-24 border-2 border-dashed border-emerald-400/60 rounded-lg flex items-center justify-center text-emerald-400 font-mono text-[11px]">
+                    [ Scanning Barcode Optical Frame ]
+                  </div>
+                  <p className="text-[10px] text-navy-400">
+                    Browser camera permission required. Tap verified preset above for instant lookup.
+                  </p>
+                </div>
+              )}
+
+              {/* Error State */}
+              {barcodeError && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-2">
+                  <div className="flex items-start gap-1.5 font-semibold text-amber-900">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                    <span>{barcodeError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewItem({
+                        ...newItem,
+                        barcode: barcodeInput.trim(),
+                        sku: `SKU-${barcodeInput.trim().slice(-6)}`,
+                      });
+                      setShowBarcodeModal(false);
+                      setShowAddModal(true);
+                    }}
+                    className="w-full py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-lg font-bold text-xs transition-colors"
+                  >
+                    Open Manual Entry with this Barcode
+                  </button>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBarcodeModal(false);
+                    setIsCameraActive(false);
+                  }}
+                  className="flex-1 py-2.5 text-xs font-bold rounded-xl border border-navy-200 text-navy-700 hover:bg-navy-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isBarcodeLoading}
+                  className="flex-1 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
+                >
+                  {isBarcodeLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{t.searchingCatalog || 'Querying...'}</span>
+                    </>
+                  ) : (
+                    <span>{t.lookupBtn || 'Lookup Product'}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* STAGE 2.3: PRODUCT REVIEW MODAL (HUMAN-IN-THE-LOOP SAFEGUARD) */}
+      {showReviewModal && reviewedCatalogProduct && (
+        <div className="fixed inset-0 z-50 bg-navy-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-surface-card rounded-3xl max-w-lg w-full p-6 border border-surface-border shadow-elevated space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-surface-border pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base text-navy-900">
+                    {t.productReviewTitle || 'Review Product Metadata'}
+                  </h3>
+                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded-full font-mono">
+                    ● Open Food Facts
+                  </span>
+                </div>
+                <p className="text-xs text-navy-500 mt-0.5">
+                  Confirm catalog information and configure store-specific costs and stock.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowReviewModal(false)}
+                className="p-1 rounded-lg text-navy-400 hover:text-navy-700 hover:bg-navy-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Catalog Information Card */}
+            <div className="bg-navy-50 rounded-2xl p-4 border border-navy-200/80 flex items-start gap-4">
+              {reviewedCatalogProduct.imageUrl ? (
+                <img
+                  src={reviewedCatalogProduct.imageUrl}
+                  alt={reviewedCatalogProduct.productName}
+                  className="w-16 h-16 object-contain rounded-xl bg-white p-1 border border-navy-200 shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-navy-200/60 flex items-center justify-center text-navy-600 shrink-0">
+                  <Package className="w-8 h-8" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
+                  {reviewedCatalogProduct.category}
+                </span>
+                <h4 className="font-extrabold text-sm text-navy-900 mt-1 truncate">
+                  {reviewedCatalogProduct.productName}
+                </h4>
+                <p className="text-xs text-navy-600">
+                  Brand: <span className="font-semibold">{reviewedCatalogProduct.brand}</span>
+                  {reviewedCatalogProduct.packSize && ` • Size: ${reviewedCatalogProduct.packSize}`}
+                </p>
+                <p className="text-[11px] text-navy-400 font-mono mt-0.5">
+                  Barcode: {reviewedCatalogProduct.barcode}
+                </p>
+              </div>
+            </div>
+
+            {/* Duplicate Warning */}
+            {duplicateWarning && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                <span>{duplicateWarning}</span>
+              </div>
+            )}
+
+            {/* Mandatory Store Manager Inputs */}
+            <form onSubmit={handleConfirmReviewedProduct} className="space-y-3 pt-1">
+              <div className="text-[11px] uppercase tracking-wider font-extrabold text-navy-500">
+                Store-Specific Business Fields (Required)
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-navy-700 block mb-1">
+                    Store Purchase Cost (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.5"
+                    value={reviewFields.purchaseCost}
+                    onChange={(e) => setReviewFields({ ...reviewFields, purchaseCost: Number(e.target.value) })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-navy-200 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-navy-700 block mb-1">
+                    Store Selling Price (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.5"
+                    value={reviewFields.sellingPrice}
+                    onChange={(e) => setReviewFields({ ...reviewFields, sellingPrice: Number(e.target.value) })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-navy-200 font-mono font-bold text-emerald-700"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-navy-700 block mb-1">
+                    Initial Physical Count *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={reviewFields.physicalStock}
+                    onChange={(e) => setReviewFields({ ...reviewFields, physicalStock: Number(e.target.value) })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-navy-200 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-navy-700 block mb-1">
+                    Reorder Point *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={reviewFields.reorderThreshold}
+                    onChange={(e) => setReviewFields({ ...reviewFields, reorderThreshold: Number(e.target.value) })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-navy-200 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-navy-700 block mb-1">
+                    Safety Stock *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={reviewFields.safetyStock}
+                    onChange={(e) => setReviewFields({ ...reviewFields, safetyStock: Number(e.target.value) })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-navy-200 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-navy-700 block mb-1">
+                  Primary Supplier
+                </label>
+                <input
+                  type="text"
+                  value={reviewFields.supplier}
+                  onChange={(e) => setReviewFields({ ...reviewFields, supplier: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-navy-200"
+                />
+              </div>
+
+              {/* Strict Disclaimer */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-navy-500 flex items-start gap-2">
+                <Info className="w-4 h-4 shrink-0 text-navy-400 mt-0.5" />
+                <span>
+                  {t.productReviewDisclaimer || 'Public catalog data. Purchase cost, selling price, and stock quantities must be configured by store manager.'}
+                </span>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReviewModal(false)}
+                  className="flex-1 py-2.5 text-xs font-bold rounded-xl border border-navy-200 text-navy-700 hover:bg-navy-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
+                >
+                  {t.confirmAddProduct || 'Confirm & Add to Inventory'}
                 </button>
               </div>
             </form>

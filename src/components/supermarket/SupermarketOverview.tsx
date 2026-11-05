@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Language } from '../../types';
 import { inventoryService } from '../../services/InventoryService';
 import { salesAnalyticsService } from '../../services/SalesAnalyticsService';
 import { procurementService } from '../../services/ProcurementService';
+import { translations } from '../../translations';
 import { 
   Building2, 
   Package, 
@@ -14,7 +15,14 @@ import {
   ShoppingCart, 
   Truck, 
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  CloudSun,
+  Calendar,
+  Thermometer,
+  Droplets,
+  CloudRain,
+  RefreshCw,
+  Info
 } from 'lucide-react';
 
 interface SupermarketOverviewProps {
@@ -28,6 +36,7 @@ export const SupermarketOverview: React.FC<SupermarketOverviewProps> = ({
   onNavigateSection,
   language,
 }) => {
+  const t = translations[language];
   const items = inventoryService.getInventory(businessId);
   const salesMetrics = salesAnalyticsService.calculateMetrics(businessId);
   const plan = procurementService.calculateSupermarketPlan(businessId, 25000, 7);
@@ -36,6 +45,63 @@ export const SupermarketOverview: React.FC<SupermarketOverviewProps> = ({
   const inventoryValuation = items.reduce((sum, i) => sum + i.stock.physicalStock * i.purchaseCost, 0);
   const lowStockItems = items.filter(i => i.status === 'low_stock' || i.stock.availableStock <= i.reorderThreshold);
   const nearExpiryItems = items.filter(i => i.status === 'near_expiry');
+
+  // Stage 2.3: Live Weather State (Open-Meteo)
+  const [weatherData, setWeatherData] = useState<any>(null);
+  const [weatherStatus, setWeatherStatus] = useState<'LOADING' | 'LIVE' | 'CACHED' | 'UNAVAILABLE'>('LOADING');
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+
+  // Stage 2.3: Statutory Holiday Calendar State (Official 2026 Gazette)
+  const [holidaysData, setHolidaysData] = useState<any[]>([]);
+  const [holidaysStatus, setHolidaysStatus] = useState<'LOADING' | 'LOCAL_VERIFIED' | 'UNAVAILABLE'>('LOADING');
+  const [showAllYearHolidays, setShowAllYearHolidays] = useState(false);
+
+  // Fetch Live Weather
+  const fetchWeather = async () => {
+    setWeatherStatus('LOADING');
+    setWeatherError(null);
+    try {
+      const res = await fetch('/api/weather?lat=17.6868&lon=83.2185');
+      const json = await res.json();
+      if (json && json.data) {
+        setWeatherData(json.data);
+        setWeatherStatus(json.status || 'LIVE');
+      } else {
+        setWeatherStatus('UNAVAILABLE');
+        setWeatherError(json.error || 'Weather observation unavailable');
+      }
+    } catch {
+      setWeatherStatus('UNAVAILABLE');
+      setWeatherError('Network disconnected. Weather service offline.');
+    }
+  };
+
+  // Fetch Official Gazetted Holidays
+  const fetchHolidays = async () => {
+    setHolidaysStatus('LOADING');
+    try {
+      const res = await fetch('/api/holidays?year=2026&region=AP');
+      const json = await res.json();
+      if (json && json.success && Array.isArray(json.data)) {
+        setHolidaysData(json.data);
+        setHolidaysStatus(json.status || 'LOCAL_VERIFIED');
+      } else {
+        setHolidaysStatus('UNAVAILABLE');
+      }
+    } catch {
+      setHolidaysStatus('UNAVAILABLE');
+    }
+  };
+
+  useEffect(() => {
+    fetchWeather();
+    fetchHolidays();
+  }, []);
+
+  // Filter Upcoming Holidays relative to current date
+  const todayYmd = new Date().toISOString().split('T')[0];
+  const upcomingHolidays = holidaysData.filter(h => h.date >= todayYmd);
+  const displayedHolidays = showAllYearHolidays ? holidaysData : upcomingHolidays;
 
   return (
     <div className="space-y-6">
@@ -133,6 +199,219 @@ export const SupermarketOverview: React.FC<SupermarketOverviewProps> = ({
           </div>
           <div className="text-xs text-rose-700 font-medium mt-1">
             {nearExpiryItems.length} items near expiry
+          </div>
+        </div>
+      </div>
+
+      {/* STAGE 2.3: EXTERNAL INTELLIGENCE (WEATHER & STATUTORY HOLIDAYS) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Live Weather Card (Open-Meteo) */}
+        <div className="bg-surface-card rounded-2xl p-6 border border-surface-border shadow-card space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
+                <CloudSun className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base text-navy-900">
+                    {t.liveWeatherTitle || 'Live Operational Weather'}
+                  </h3>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono uppercase ${
+                    weatherStatus === 'LIVE'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : weatherStatus === 'CACHED'
+                      ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                      : 'bg-slate-100 text-slate-700 border border-slate-300'
+                  }`}>
+                    ● {weatherStatus}
+                  </span>
+                </div>
+                <p className="text-[11px] text-navy-500">
+                  {t.weatherVizagDefault || 'Poorna Market & MVP Rythu Bazaar, Visakhapatnam (Demo Default)'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={fetchWeather}
+              title="Refresh Weather"
+              className="p-2 rounded-xl text-navy-500 hover:text-navy-900 hover:bg-navy-50 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${weatherStatus === 'LOADING' ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {weatherStatus === 'LOADING' && (
+            <div className="py-8 flex flex-col items-center justify-center text-xs text-navy-400 space-y-2">
+              <RefreshCw className="w-5 h-5 animate-spin text-emerald-600" />
+              <span>Fetching live atmospheric observation...</span>
+            </div>
+          )}
+
+          {weatherStatus !== 'LOADING' && weatherData && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3 bg-navy-50/70 p-3.5 rounded-2xl border border-navy-100">
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-navy-500 font-semibold flex items-center gap-1">
+                    <Thermometer className="w-3.5 h-3.5 text-rose-500" />
+                    <span>{t.temperature || 'Temperature'}</span>
+                  </div>
+                  <div className="text-xl font-extrabold text-navy-900 font-mono">
+                    {weatherData.current?.temperatureC !== null ? `${weatherData.current?.temperatureC}°C` : 'N/A'}
+                  </div>
+                </div>
+
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-navy-500 font-semibold flex items-center gap-1">
+                    <Droplets className="w-3.5 h-3.5 text-sky-500" />
+                    <span>{t.humidity || 'Humidity'}</span>
+                  </div>
+                  <div className="text-xl font-extrabold text-navy-900 font-mono">
+                    {weatherData.current?.relativeHumidityPercent !== null ? `${weatherData.current?.relativeHumidityPercent}%` : 'N/A'}
+                  </div>
+                </div>
+
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-navy-500 font-semibold flex items-center gap-1">
+                    <CloudRain className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{t.precipitation || 'Precipitation'}</span>
+                  </div>
+                  <div className="text-xl font-extrabold text-navy-900 font-mono">
+                    {weatherData.current?.precipitationMm} mm
+                  </div>
+                </div>
+              </div>
+
+              {/* Produce Handling Advisories */}
+              {Array.isArray(weatherData.advisories) && weatherData.advisories.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-extrabold text-navy-600 uppercase tracking-wider block">
+                    {t.operationalAdvisories || 'Operational Produce Advisories'}:
+                  </span>
+                  {weatherData.advisories.map((adv: any, idx: number) => (
+                    <div key={idx} className={`p-2.5 rounded-xl border text-xs flex items-start gap-2 ${
+                      adv.severity === 'high' 
+                        ? 'bg-rose-50 border-rose-200 text-rose-900' 
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    }`}>
+                      <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
+                        adv.severity === 'high' ? 'text-rose-600' : 'text-amber-600'
+                      }`} />
+                      <div>
+                        <p className="font-semibold">{language === 'te' ? adv.textTe : adv.textEn}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="text-[10px] text-navy-400 flex items-center justify-between pt-1">
+                <span>{weatherData.attribution}</span>
+                <span>Observed: {weatherData.current?.observedAt?.replace('T', ' ')}</span>
+              </div>
+            </div>
+          )}
+
+          {weatherStatus === 'UNAVAILABLE' && (
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-navy-500 flex items-start gap-2">
+              <Info className="w-4 h-4 text-navy-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-navy-700">Weather Context Temporarily Offline</p>
+                <p className="text-[11px] mt-0.5">
+                  {weatherError || 'External weather connection unavailable. Store operations and inventory remain 100% functional.'}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Statutory Holiday Calendar Card (Official 2026 Gazette) */}
+        <div className="bg-surface-card rounded-2xl p-6 border border-surface-border shadow-card space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                <Calendar className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base text-navy-900">
+                    {t.upcomingHolidaysTitle || 'Upcoming Gazetted Holidays'}
+                  </h3>
+                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full font-mono uppercase">
+                    ● LOCAL_VERIFIED
+                  </span>
+                </div>
+                <p className="text-[11px] text-navy-500">
+                  {t.holidayAuthorityCitation || 'Official DoPT & AP GAD Statutory Schedule 2026'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowAllYearHolidays(!showAllYearHolidays)}
+              className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-lg border border-emerald-200 transition-colors"
+            >
+              {showAllYearHolidays ? `Upcoming Only (${upcomingHolidays.length})` : `Full Year (${holidaysData.length})`}
+            </button>
+          </div>
+
+          <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
+            {displayedHolidays.length === 0 ? (
+              <div className="py-8 text-center text-xs text-navy-400 bg-navy-50/50 rounded-xl border border-navy-100">
+                <p>{t.noUpcomingHolidays || 'No upcoming gazetted holidays in the immediate horizon.'}</p>
+                <button
+                  onClick={() => setShowAllYearHolidays(true)}
+                  className="mt-2 text-emerald-700 font-bold hover:underline"
+                >
+                  View full 2026 gazette calendar ({holidaysData.length} total)
+                </button>
+              </div>
+            ) : (
+              displayedHolidays.map((holiday, idx) => {
+                const isUpcoming = holiday.date >= todayYmd;
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-xl border transition-all text-xs space-y-1 ${
+                      isUpcoming 
+                        ? 'bg-white border-navy-200 shadow-2xs' 
+                        : 'bg-slate-50/60 border-slate-200 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-extrabold text-navy-900 flex items-center gap-1.5">
+                        <span>{language === 'te' ? holiday.nameTe : holiday.nameEn}</span>
+                        {language === 'te' && (
+                          <span className="text-[10px] text-navy-500 font-normal">({holiday.nameEn})</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded font-mono ${
+                          isUpcoming ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {holiday.date}
+                        </span>
+                        <span className="text-[10px] bg-navy-100 text-navy-700 px-1.5 py-0.2 rounded font-semibold">
+                          {holiday.jurisdiction}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-navy-600 text-[11px] leading-relaxed">
+                      {language === 'te' ? holiday.marketAdvisoryTe : holiday.marketAdvisoryEn}
+                    </p>
+                    <div className="text-[10px] text-navy-400 font-mono">
+                      Authority: {holiday.authority}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="text-[10px] text-navy-400 flex items-center justify-between pt-1 border-t border-surface-border">
+            <span>Verified against DoPT F.No.12/2/2025-JCA & AP GAD Notification</span>
+            <span className="font-semibold text-emerald-700">Qualitative retail guidance only</span>
           </div>
         </div>
       </div>

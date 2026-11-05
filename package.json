@@ -9,9 +9,10 @@
     "server": "node server.js",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "esbuild tests/platform.test.ts --bundle --platform=node --outfile=tests/dist/platform.test.cjs && node tests/dist/platform.test.cjs && esbuild tests/stage2_1_services.test.ts --bundle --platform=node --outfile=tests/dist/stage2_1_services.test.cjs && node tests/dist/stage2_1_services.test.cjs",
+    "test": "esbuild tests/platform.test.ts --bundle --platform=node --outfile=tests/dist/platform.test.cjs && node tests/dist/platform.test.cjs && esbuild tests/stage2_1_services.test.ts --bundle --platform=node --outfile=tests/dist/stage2_1_services.test.cjs && node tests/dist/stage2_1_services.test.cjs && esbuild tests/stage2_3_supermarket_integration.test.ts --bundle --platform=node --outfile=tests/dist/stage2_3_supermarket_integration.test.cjs && node tests/dist/stage2_3_supermarket_integration.test.cjs",
     "test:regression": "esbuild tests/platform.test.ts --bundle --platform=node --outfile=tests/dist/platform.test.cjs && node tests/dist/platform.test.cjs",
-    "test:services": "esbuild tests/stage2_1_services.test.ts --bundle --platform=node --outfile=tests/dist/stage2_1_services.test.cjs && node tests/dist/stage2_1_services.test.cjs"
+    "test:services": "esbuild tests/stage2_1_services.test.ts --bundle --platform=node --outfile=tests/dist/stage2_1_services.test.cjs && node tests/dist/stage2_1_services.test.cjs",
+    "test:supermarket": "esbuild tests/stage2_3_supermarket_integration.test.ts --bundle --platform=node --outfile=tests/dist/stage2_3_supermarket_integration.test.cjs && node tests/dist/stage2_3_supermarket_integration.test.cjs"
   },
   "dependencies": {
     "@esbuild/win32-x64": "^0.28.2",
