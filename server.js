@@ -1,36 +1,132 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 
-dotenv.config();
+import { config, getSanitizedConfig } from './server/config.js';
+import { weatherService } from './server/services/WeatherService.js';
+import { marketPriceService } from './server/services/MarketPriceService.js';
+import { barcodeService } from './server/services/BarcodeService.js';
+import { holidayService } from './server/services/HolidayService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = config.port;
 
 app.use(cors());
 app.use(express.json());
 
 // Initialize Google GenAI if key is present
-const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const apiKey = config.geminiApiKey;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
-// Health check endpoint
+// Enhanced Health check endpoint reporting provider status without exposing secrets
 app.get('/api/health', (req, res) => {
+  const sanitized = getSanitizedConfig();
   res.json({
     status: 'ok',
     appName: 'LocalPulse AI',
-    hasGeminiKey: Boolean(apiKey),
-    model: 'gemini-3.8-flash',
+    version: '2.1.0',
+    timestamp: new Date().toISOString(),
     location: 'Poorna Market & MVP Rythu Bazaar, Visakhapatnam',
-    team: 'VECTORX'
+    team: 'VECTORX',
+    hasGeminiKey: sanitized.hasGeminiKey,
+    model: 'gemini-2.5-flash',
+    providers: {
+      gemini: {
+        configured: sanitized.hasGeminiKey,
+        status: sanitized.hasGeminiKey ? 'CONFIGURED' : 'BLOCKED',
+        note: sanitized.hasGeminiKey ? 'Ready for inference' : 'GEMINI_API_KEY not configured. Deterministic fallback active.',
+      },
+      weather: {
+        provider: 'Open-Meteo',
+        status: 'READY',
+        endpoint: 'https://api.open-meteo.com/v1/forecast',
+        license: 'CC BY 4.0',
+      },
+      mandi: {
+        provider: 'data.gov.in (AGMARKNET)',
+        configured: sanitized.hasDataGovKey,
+        status: sanitized.hasDataGovKey ? 'CONFIGURED' : 'BLOCKED',
+        note: sanitized.hasDataGovKey ? 'Live API key ready' : 'DATA_GOV_IN_API_KEY not configured. Serving verified historical benchmarks.',
+      },
+      barcode: {
+        provider: 'Open Food Facts v3',
+        status: 'READY',
+        endpoint: 'https://world.openfoodfacts.org/api/v3',
+        userAgent: sanitized.userAgent,
+      },
+      holidays: {
+        provider: 'Official Central & AP Gazetted Calendars',
+        status: 'READY',
+        year: 2026,
+        sources: ['DoPT (Govt of India)', 'GAD (Govt of Andhra Pradesh)'],
+      },
+    },
   });
+});
+
+// GET /api/weather: Open-Meteo weather with operational retail advisories
+app.get('/api/weather', async (req, res) => {
+  const lat = req.query.lat ? parseFloat(req.query.lat) : undefined;
+  const lon = req.query.lon ? parseFloat(req.query.lon) : undefined;
+
+  try {
+    const result = await weatherService.getWeather(lat, lon);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      status: 'UNAVAILABLE',
+      error: error.message || 'Failed to fetch weather observation',
+    });
+  }
+});
+
+// GET /api/mandi: data.gov.in / AGMARKNET prices with ₹/quintal -> ₹/kg normalization
+app.get('/api/mandi', async (req, res) => {
+  const district = req.query.district || 'Visakhapatnam';
+  const commodity = req.query.commodity || null;
+
+  try {
+    const result = await marketPriceService.getMandiPrices(district, commodity);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      status: 'UNAVAILABLE',
+      error: error.message || 'Failed to fetch mandi market prices',
+    });
+  }
+});
+
+// GET /api/product/barcode/:barcode: Open Food Facts lookup with descriptive User-Agent
+app.get('/api/product/barcode/:barcode', async (req, res) => {
+  const barcode = req.params.barcode;
+
+  try {
+    const result = await barcodeService.lookupBarcode(barcode);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      status: 'UNAVAILABLE',
+      error: error.message || 'Failed to query barcode directory',
+    });
+  }
+});
+
+// GET /api/holidays: Official Central & AP Gazetted Holiday Calendar 2026
+app.get('/api/holidays', (req, res) => {
+  const year = req.query.year || 2026;
+  const region = req.query.region || 'AP';
+
+  const result = holidayService.getHolidays(year, region);
+  res.json(result);
 });
 
 // Deterministic fallback generator matching prompt requirements
