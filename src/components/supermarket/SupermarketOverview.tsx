@@ -22,7 +22,8 @@ import {
   Droplets,
   CloudRain,
   RefreshCw,
-  Info
+  Info,
+  Wind
 } from 'lucide-react';
 
 interface SupermarketOverviewProps {
@@ -251,7 +252,7 @@ export const SupermarketOverview: React.FC<SupermarketOverviewProps> = ({
 
           {weatherStatus !== 'LOADING' && weatherData && (
             <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-3 bg-navy-50/70 p-3.5 rounded-2xl border border-navy-100">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-navy-50/70 p-3.5 rounded-2xl border border-navy-100">
                 <div className="space-y-0.5">
                   <div className="text-[11px] text-navy-500 font-semibold flex items-center gap-1">
                     <Thermometer className="w-3.5 h-3.5 text-rose-500" />
@@ -281,7 +282,42 @@ export const SupermarketOverview: React.FC<SupermarketOverviewProps> = ({
                     {weatherData.current?.precipitationMm} mm
                   </div>
                 </div>
+
+                <div className="space-y-0.5">
+                  <div className="text-[11px] text-navy-500 font-semibold flex items-center gap-1">
+                    <Wind className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Wind</span>
+                  </div>
+                  <div className="text-xl font-extrabold text-navy-900 font-mono">
+                    {weatherData.current?.windSpeedKmH || 0} km/h
+                  </div>
+                </div>
               </div>
+
+              {/* 7-Day Atmospheric Horizon Strip */}
+              {Array.isArray(weatherData.dailyForecast) && weatherData.dailyForecast.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-extrabold text-navy-600 uppercase tracking-wider block">
+                    7-Day Atmospheric Outlook (Produce Planning):
+                  </span>
+                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+                    {weatherData.dailyForecast.slice(0, 7).map((d: any, idx: number) => {
+                      const dayName = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' });
+                      return (
+                        <div key={idx} className="bg-white p-2 rounded-xl border border-navy-100 text-center space-y-0.5">
+                          <span className="text-[10px] font-bold text-navy-500 block uppercase">{dayName}</span>
+                          <span className="text-xs font-mono font-extrabold text-navy-900 block">
+                            {d.maxTemp ? `${Math.round(d.maxTemp)}°` : '—'}
+                          </span>
+                          <span className="text-[10px] text-navy-400 block font-mono">
+                            {d.precipitationProbability ? `${d.precipitationProbability}%` : '0%'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Produce Handling Advisories */}
               {Array.isArray(weatherData.advisories) && weatherData.advisories.length > 0 && (

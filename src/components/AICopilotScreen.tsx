@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   ProcurementPlan, 
   Language, 
-  GeminiExplanationResponse 
+  GeminiExplanationResponse,
+  LiveWeatherReport,
+  LiveMandiRecord
 } from '../types';
 import { translations } from '../translations';
 import { MainActionButton } from './MainActionButton';
@@ -33,12 +35,16 @@ interface AICopilotScreenProps {
   plan: ProcurementPlan;
   onRecalculatePlan: () => void;
   language: Language;
+  weather?: LiveWeatherReport | null;
+  mandiPrices?: LiveMandiRecord[];
 }
 
 export const AICopilotScreen: React.FC<AICopilotScreenProps> = ({
   plan,
   onRecalculatePlan,
   language,
+  weather,
+  mandiPrices,
 }) => {
   const t = translations[language];
 
@@ -65,6 +71,8 @@ export const AICopilotScreen: React.FC<AICopilotScreenProps> = ({
           budget: plan.totalBudget,
           totalCost: plan.totalCost,
           remainingCash: plan.remainingCash,
+          weather,
+          mandiPrices,
           items: plan.items.map(item => ({
             nameEn: item.item.nameEn,
             nameTe: item.item.nameTe,

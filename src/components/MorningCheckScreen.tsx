@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { 
   VegetableItem, 
   Language, 
-  ActiveScreen 
+  ActiveScreen,
+  LiveWeatherReport,
+  LiveMandiRecord
 } from '../types';
 import { translations } from '../translations';
 import { MainActionButton } from './MainActionButton';
+import { VendorMarketIntelligence } from './vendor/VendorMarketIntelligence';
 import { 
   IndianRupee, 
   Mic, 
@@ -36,6 +39,8 @@ interface MorningCheckScreenProps {
   onOpenPhotoModal: () => void;
   onGeneratePlan: () => void;
   language: Language;
+  onWeatherUpdate?: (weather: LiveWeatherReport | null) => void;
+  onMandiUpdate?: (mandi: LiveMandiRecord[]) => void;
 }
 
 export const MorningCheckScreen: React.FC<MorningCheckScreenProps> = ({
@@ -51,6 +56,8 @@ export const MorningCheckScreen: React.FC<MorningCheckScreenProps> = ({
   onOpenPhotoModal,
   onGeneratePlan,
   language,
+  onWeatherUpdate,
+  onMandiUpdate,
 }) => {
   const t = translations[language];
 
@@ -140,6 +147,13 @@ export const MorningCheckScreen: React.FC<MorningCheckScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Live Atmospheric Weather & Mandi Intelligence Widget */}
+      <VendorMarketIntelligence
+        language={language}
+        onWeatherUpdate={onWeatherUpdate}
+        onMandiUpdate={onMandiUpdate}
+      />
 
       {/* Cash Budget Input Box */}
       <div className="bg-gradient-to-br from-navy-900 to-navy-950 text-white rounded-2xl p-6 shadow-elevated border border-navy-800">

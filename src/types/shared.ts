@@ -77,7 +77,7 @@ export interface InventoryMovement {
   businessId: string;
   productId: string;
   productName: string;
-  type: 'sale' | 'supplier_receipt' | 'inventory_count' | 'p2p_reserved' | 'p2p_release' | 'p2p_trade_deduction' | 'damage_writeoff';
+  type: 'sale' | 'supplier_receipt' | 'inventory_count' | 'p2p_reserved' | 'p2p_release' | 'p2p_trade_deduction' | 'damage_writeoff' | 'PURCHASE_IN' | 'SALE_OUT';
   quantityChange: number; // positive or negative
   unit: UnitOfMeasure;
   previousPhysicalStock: number;
@@ -108,3 +108,60 @@ export interface WeatherObservation {
   timestamp: string;
   isDemo: boolean;
 }
+
+export interface LiveWeatherReport {
+  provider: string;
+  location: {
+    latitude: number;
+    longitude: number;
+    city: string;
+    locality: string;
+    timezone: string;
+    isDemoLocation: boolean;
+  };
+  current: {
+    temperatureC: number | null;
+    relativeHumidityPercent: number | null;
+    precipitationMm: number;
+    windSpeedKmH: number;
+    weatherCode: number;
+    isDay: boolean;
+    observedAt: string;
+  };
+  dailyForecast: Array<{
+    date: string;
+    maxTemp: number | null;
+    minTemp: number | null;
+    precipitationSum: number;
+    precipitationProbability: number;
+  }>;
+  advisories: Array<{
+    type: string;
+    severity: 'high' | 'medium' | 'low';
+    textEn: string;
+    textTe: string;
+  }>;
+  attribution: string;
+}
+
+export interface LiveMandiRecord {
+  state: string;
+  district: string;
+  market: string;
+  commodity: string;
+  commodityTe?: string;
+  variety?: string;
+  grade?: string;
+  arrivalDate: string;
+  minPricePerQuintal: number;
+  maxPricePerQuintal: number;
+  modalPricePerQuintal: number;
+  minPricePerKg: number;
+  maxPricePerKg: number;
+  modalPricePerKg: number;
+  rawUnit: string;
+  normalizedUnit: string;
+  source: string;
+  isDemoOnly: boolean;
+}
+

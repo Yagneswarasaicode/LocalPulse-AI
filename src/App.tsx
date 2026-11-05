@@ -4,7 +4,9 @@ import {
   ActiveScreen, 
   Language, 
   ProcurementPlan,
-  WorkspaceTab
+  WorkspaceTab,
+  LiveWeatherReport,
+  LiveMandiRecord
 } from './types';
 import { INITIAL_SAMPLE_VEGETABLES, DEFAULT_BUDGET } from './sampleData';
 import { calculateProcurementPlan } from './utils/procurementMath';
@@ -77,6 +79,8 @@ export const App: React.FC = () => {
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [vendorWeather, setVendorWeather] = useState<LiveWeatherReport | null>(null);
+  const [vendorMandi, setVendorMandi] = useState<LiveMandiRecord[]>([]);
 
   // Sync to localStorage
   useEffect(() => {
@@ -181,6 +185,51 @@ export const App: React.FC = () => {
     showToast(language === 'te' ? 'ఫోటో స్కానర్ ద్వారా నిల్వలు నమోదయ్యాయి!' : 'Crate weights detected & applied!');
   };
 
+  const handleApplyBatchBuySell = (
+    operation: 'BUY' | 'SELL',
+    lines: Array<{ nameEn: string; nameTe?: string; quantity: number; unitPrice?: number }>,
+    idempotencyKey?: string
+  ) => {
+    setItems(prev => {
+      let updated = [...prev];
+      for (const line of lines) {
+        const matchIndex = updated.findIndex(i => 
+          i.nameEn.toLowerCase() === line.nameEn.toLowerCase() ||
+          (i.nameTe && line.nameTe && i.nameTe.toLowerCase() === line.nameTe.toLowerCase())
+        );
+
+        if (matchIndex >= 0) {
+          const item = updated[matchIndex];
+          const delta = operation === 'BUY' ? line.quantity : -line.quantity;
+          const newStock = Math.max(0, item.remainingKg + delta);
+          updated[matchIndex] = {
+            ...item,
+            remainingKg: newStock,
+            pricePerKg: line.unitPrice && line.unitPrice > 0 ? line.unitPrice : item.pricePerKg
+          };
+        } else if (operation === 'BUY') {
+          // Add as new item to cart
+          updated.unshift({
+            id: `veg-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            nameEn: line.nameEn,
+            nameTe: line.nameTe || line.nameEn,
+            remainingKg: line.quantity,
+            pricePerKg: line.unitPrice || 30,
+            dailySalesKg: Math.max(1, Math.round(line.quantity / 3)),
+            shelfLifeDays: 3,
+          });
+        }
+      }
+      return updated;
+    });
+
+    showToast(
+      language === 'te'
+        ? `${operation === 'BUY' ? 'కొనుగోలు' : 'అమ్మకం'} వివరాలు విజయవంతంగా నమోదయ్యాయి!`
+        : `Vendor stock successfully updated via AI Bill (${operation})!`
+    );
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-surface-bg text-navy-900 selection:bg-emerald-500 selection:text-white">
       {/* Top Navbar with EXACTLY THREE MAIN TABS */}
@@ -222,6 +271,8 @@ export const App: React.FC = () => {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 language={language}
+                onWeatherUpdate={setVendorWeather}
+                onMandiUpdate={setVendorMandi}
               />
             )}
 
@@ -248,6 +299,8 @@ export const App: React.FC = () => {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 language={language}
+                weather={vendorWeather}
+                mandiPrices={vendorMandi}
               />
             )}
 
@@ -301,6 +354,8 @@ export const App: React.FC = () => {
         isOpen={isPhotoModalOpen}
         onClose={() => setIsPhotoModalOpen(false)}
         onApplyInventoryUpdates={handleApplyPhotoUpdates}
+        items={items}
+        onApplyBatchBuySell={handleApplyBatchBuySell}
         language={language}
       />
 

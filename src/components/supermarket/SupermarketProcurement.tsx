@@ -13,7 +13,8 @@ import {
   FileText, 
   Check,
   TrendingDown,
-  Info
+  Info,
+  RefreshCw
 } from 'lucide-react';
 
 interface SupermarketProcurementProps {
@@ -30,24 +31,41 @@ export const SupermarketProcurement: React.FC<SupermarketProcurementProps> = ({
   const [horizonDays, setHorizonDays] = useState(7);
   const [copiedPO, setCopiedPO] = useState(false);
 
-  // Stage 2.3: Mandi Price Benchmark State
+  // Stage 2.3 & 2.6: Mandi Price Benchmark State
   const [mandiBenchmarks, setMandiBenchmarks] = useState<any[]>([]);
-  const [mandiStatus, setMandiStatus] = useState<'LOADING' | 'LIVE' | 'BLOCKED' | 'UNAVAILABLE'>('LOADING');
+  const [mandiStatus, setMandiStatus] = useState<'LOADING' | 'LIVE' | 'CACHED' | 'DEMO' | 'BLOCKED' | 'UNAVAILABLE'>('LOADING');
+  const [selectedDistrict, setSelectedDistrict] = useState('Visakhapatnam');
+  const [isRefreshingMandi, setIsRefreshingMandi] = useState(false);
+  const [mandiDisclaimer, setMandiDisclaimer] = useState('');
 
-  useEffect(() => {
-    const fetchMandi = async () => {
-      try {
-        const res = await fetch('/api/mandi?district=Visakhapatnam');
-        const json = await res.json();
-        if (json && Array.isArray(json.data)) {
-          setMandiBenchmarks(json.data);
-          setMandiStatus(json.status || 'BLOCKED');
+  const fetchMandi = async (district: string = selectedDistrict) => {
+    setIsRefreshingMandi(true);
+    setMandiStatus('LOADING');
+    try {
+      let url = `/api/mandi?limit=50`;
+      if (district && district !== 'ALL') {
+        url += `&district=${encodeURIComponent(district)}`;
+      }
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json && Array.isArray(json.data)) {
+        setMandiBenchmarks(json.data);
+        setMandiStatus(json.status || (json.isDemoOnly ? 'DEMO' : 'LIVE'));
+        if (json.disclaimer) {
+          setMandiDisclaimer(json.disclaimer);
         }
-      } catch {
+      } else {
         setMandiStatus('UNAVAILABLE');
       }
-    };
-    fetchMandi();
+    } catch {
+      setMandiStatus('UNAVAILABLE');
+    } finally {
+      setIsRefreshingMandi(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMandi('Visakhapatnam');
   }, []);
 
   const plan = procurementService.calculateSupermarketPlan(businessId, budget, horizonDays);
@@ -186,29 +204,65 @@ export const SupermarketProcurement: React.FC<SupermarketProcurementProps> = ({
         </div>
       )}
 
-      {/* STAGE 2.3: MANDI PRICE BENCHMARK REFERENCE STRIP */}
+      {/* STAGE 2.3 & 2.6: MANDI PRICE BENCHMARK REFERENCE STRIP */}
       <div className="p-4 bg-navy-50/70 border border-navy-200 rounded-2xl text-xs text-navy-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-start gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-white border border-navy-200 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
             <TrendingDown className="w-4 h-4" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold text-navy-900 text-sm">
-                Poorna Market Wholesale Price Benchmarks
+                Wholesale Mandi Arrival Benchmarks
               </span>
-              <span className="text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.2 rounded-full font-mono uppercase">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono uppercase ${
+                mandiStatus === 'LIVE'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : mandiStatus === 'CACHED'
+                  ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+              }`}>
                 ● {mandiStatus === 'BLOCKED' ? 'DEMO BENCHMARK' : mandiStatus}
               </span>
+
+              <select
+                value={selectedDistrict}
+                onChange={(e) => {
+                  setSelectedDistrict(e.target.value);
+                  fetchMandi(e.target.value);
+                }}
+                className="text-[11px] font-semibold bg-white border border-navy-200 rounded-lg px-2 py-0.5 text-navy-800 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="Visakhapatnam">Visakhapatnam</option>
+                <option value="Guntur">Guntur</option>
+                <option value="Krishna">Krishna</option>
+                <option value="East Godavari">East Godavari</option>
+                <option value="Chittoor">Chittoor</option>
+                <option value="ALL">All Andhra Pradesh</option>
+              </select>
+
+              <button
+                onClick={() => fetchMandi(selectedDistrict)}
+                disabled={isRefreshingMandi}
+                title="Refresh Mandi Prices"
+                className="p-1 rounded text-navy-500 hover:text-navy-900 hover:bg-navy-200/50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingMandi ? 'animate-spin' : ''}`} />
+              </button>
             </div>
             <p className="text-[11px] text-navy-600 mt-0.5">
               Wholesale benchmark rates for fresh produce. Optimization math strictly honors your contracted supplier prices. Benchmarks are advisory context for supplier rate negotiations.
             </p>
+            {mandiDisclaimer && (
+              <p className="text-[10px] text-amber-800 font-medium mt-1">
+                ⚠️ {mandiDisclaimer}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="text-[11px] font-mono text-navy-500 shrink-0 bg-white px-3 py-1.5 rounded-xl border border-navy-200">
-          Source: {mandiStatus === 'BLOCKED' ? 'Poorna Market Reference' : 'Live AGMARKNET'}
+        <div className="text-[11px] font-mono text-navy-500 shrink-0 bg-white px-3 py-1.5 rounded-xl border border-navy-200 self-start sm:self-auto">
+          Source: {mandiStatus === 'LIVE' ? 'Live AGMARKNET' : mandiStatus === 'CACHED' ? 'Cached AGMARKNET' : 'Poorna Market Reference'}
         </div>
       </div>
 
@@ -257,8 +311,12 @@ export const SupermarketProcurement: React.FC<SupermarketProcurementProps> = ({
                             <span className="font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                               Mandi Ref: ₹{mandi.modalPricePerKg}/{rec.product.unit}
                             </span>
-                            <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1 rounded">
-                              DEMO
+                            <span className={`text-[9px] font-bold px-1 rounded ${
+                              mandi.isDemoOnly 
+                                ? 'bg-amber-100 text-amber-800' 
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {mandi.isDemoOnly ? 'DEMO' : 'LIVE'}
                             </span>
                           </div>
                         );

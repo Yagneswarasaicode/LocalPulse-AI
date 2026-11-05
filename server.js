@@ -10,6 +10,8 @@ import { weatherService } from './server/services/WeatherService.js';
 import { marketPriceService } from './server/services/MarketPriceService.js';
 import { barcodeService } from './server/services/BarcodeService.js';
 import { holidayService } from './server/services/HolidayService.js';
+import { validateFileBuffer, parseMultipartFormData } from './server/services/MultipartParser.js';
+import { documentVisionService } from './server/services/DocumentVisionService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,7 +20,8 @@ const app = express();
 const PORT = config.port;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
+app.use(express.raw({ type: 'multipart/form-data', limit: '15mb' }));
 
 // Initialize Google GenAI if key is present
 const apiKey = config.geminiApiKey;
@@ -89,11 +92,15 @@ app.get('/api/weather', async (req, res) => {
 
 // GET /api/mandi: data.gov.in / AGMARKNET prices with ₹/quintal -> ₹/kg normalization
 app.get('/api/mandi', async (req, res) => {
-  const district = req.query.district || 'Visakhapatnam';
+  const state = req.query.state !== undefined ? req.query.state : 'Andhra Pradesh';
+  const district = req.query.district !== undefined ? req.query.district : (req.query.commodity ? null : 'Visakhapatnam');
+  const market = req.query.market || null;
   const commodity = req.query.commodity || null;
+  const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
+  const offset = req.query.offset ? parseInt(req.query.offset, 10) : 0;
 
   try {
-    const result = await marketPriceService.getMandiPrices(district, commodity);
+    const result = await marketPriceService.getMandiPrices({ state, district, market, commodity, limit, offset });
     res.json(result);
   } catch (error) {
     res.status(500).json({
@@ -129,8 +136,8 @@ app.get('/api/holidays', (req, res) => {
   res.json(result);
 });
 
-// Deterministic fallback generator matching prompt requirements
-function generateFallbackExplanation(budget, totalCost, remainingCash, items) {
+// Deterministic fallback generator matching prompt requirements with weather and mandi grounding
+function generateFallbackExplanation(budget, totalCost, remainingCash, items, weather = null, mandiPrices = []) {
   const buyItems = items.filter(i => (i.recommendedBuyKg || 0) > 0);
   const skipItems = items.filter(i => (i.recommendedBuyKg || 0) === 0 || i.priority === 'SKIP');
 
@@ -152,6 +159,27 @@ function generateFallbackExplanation(budget, totalCost, remainingCash, items) {
   const englishParts = buyItems.slice(0, 3).map(i => `${i.recommendedBuyKg}kg ${i.nameEn} (₹${i.estimatedCost})`);
   const englishExplanation = `Today buy ${englishParts.join(', ')}. Do not buy ${skipItems.length > 0 ? skipItems[0].nameEn : 'slow-moving items'} as you have enough stock left. Remaining cash: ₹${remainingCash.toLocaleString('en-IN')}.`;
 
+  // Grounding weather and mandi into fallback tips
+  let weatherTipEn = 'Vizag coastal humidity increases tomato spoilage. Store in aerated plastic crates.';
+  let weatherTipTe = 'విశాఖపట్నం తేమ వల్ల టమాటాలు త్వరగా పాడవుతాయి. గాలి తగిలే బుట్టల్లో భద్రపరచండి.';
+  if (weather && weather.current) {
+    if (weather.current.temperatureC >= 32) {
+      weatherTipEn = `High temperature (${weather.current.temperatureC}°C) today. Keep leafy greens shaded and spritz water frequently.`;
+      weatherTipTe = `ఈ రోజు ఉష్ణోగ్రత (${weather.current.temperatureC}°C) ఎక్కువ. ఆకుకూరలను నీడలో ఉంచి తడి చల్లండి.`;
+    } else if (weather.current.precipitationMm > 0) {
+      weatherTipEn = `Rainfall (${weather.current.precipitationMm}mm) forecasted. Keep plastic tarpaulins ready and guard produce against waterlogging.`;
+      weatherTipTe = `వర్ష సూచన (${weather.current.precipitationMm}mm). కవర్లు సిద్ధంగా ఉంచుకోండి.`;
+    }
+  }
+
+  let mandiTipEn = weatherTipEn;
+  let mandiTipTe = weatherTipTe;
+  if (Array.isArray(mandiPrices) && mandiPrices.length > 0) {
+    const tomatoMandi = mandiPrices.find(m => m.commodity && m.commodity.toLowerCase().includes('tomato')) || mandiPrices[0];
+    mandiTipEn = `AGMARKNET Benchmark: ${tomatoMandi.commodity} modal price is ₹${tomatoMandi.modalPricePerKg}/kg at ${tomatoMandi.market || 'Visakhapatnam'}. Compare your purchase invoice against this benchmark.`;
+    mandiTipTe = `మార్కెట్ మోడల్ రేటు: ${tomatoMandi.commodityTe || tomatoMandi.commodity} కిలో ₹${tomatoMandi.modalPricePerKg}గా ఉంది. మీ కొనుగోలు ధరను సరిచూసుకోండి.`;
+  }
+
   return {
     telugu_audio_script: teluguAudioScript,
     english_explanation: englishExplanation,
@@ -161,21 +189,21 @@ function generateFallbackExplanation(budget, totalCost, remainingCash, items) {
       quantity_kg: i.recommendedBuyKg,
       cost_inr: i.estimatedCost,
       priority: i.priority,
-      reason: `Stock covers only ${(Math.round(i.daysLeft * 10) / 10)} days. Urgent demand at Rythu Bazaar.`
+      reason: `Stock covers only ${(Math.round((i.daysLeft || 1) * 10) / 10)} days. Urgent demand at Rythu Bazaar.`
     })),
     items_to_skip: skipItems.map(i => ({
       item: i.nameEn,
       item_te: i.nameTe || i.nameEn,
-      reason: `You have ${Math.round(i.daysLeft * 10) / 10} days of buffer (${i.remainingKg}kg). Avoid spoilage loss.`,
-      reason_te: `${i.remainingKg} కేజీలు మిగిలి ఉన్నాయి (${Math.round(i.daysLeft * 10) / 10} రోజులు). కుళ్లిపోకుండా డబ్బు ఆదా చేయండి.`
+      reason: `You have ${Math.round((i.daysLeft || 3) * 10) / 10} days of buffer (${i.remainingKg}kg). Avoid spoilage loss.`,
+      reason_te: `${i.remainingKg} కేజీలు మిగిలి ఉన్నాయి (${Math.round((i.daysLeft || 3) * 10) / 10} రోజులు). కుళ్లిపోకుండా డబ్బు ఆదా చేయండి.`
     })),
     remaining_cash_advice: {
       telugu: `మిగిలిన ₹${remainingCash.toLocaleString('en-IN')} అత్యవసర లేదా మధ్యాహ్నం ధర తగ్గినప్పుడు మాత్రమే వాడండి.`,
       english: `Keep leftover ₹${remainingCash.toLocaleString('en-IN')} safe as working capital reserve for afternoon price dips at Poorna Market.`
     },
     mandi_tip: {
-      telugu: 'విశాఖపట్నం తేమ వల్ల టమాటాలు త్వరగా పాడవుతాయి. గాలి తగిలే బుట్టల్లో భద్రపరచండి.',
-      english: 'Vizag coastal humidity increases tomato spoilage. Store in aerated plastic crates away from direct sunlight.'
+      telugu: mandiTipTe,
+      english: mandiTipEn
     },
     budget_stats: {
       total_budget: budget,
@@ -188,17 +216,51 @@ function generateFallbackExplanation(budget, totalCost, remainingCash, items) {
 
 // POST /api/explain: Grounded Gemini Telugu Audio/Text Explainer
 app.post('/api/explain', async (req, res) => {
-  const { budget = 2000, items = [], totalCost = 0, remainingCash = 0 } = req.body;
+  const { 
+    budget = 2000, 
+    items = [], 
+    totalCost = 0, 
+    remainingCash = 0,
+    weather = null,
+    mandiPrices = []
+  } = req.body;
+
+  let activeWeather = weather;
+  if (!activeWeather) {
+    try {
+      const w = await weatherService.getWeather();
+      activeWeather = w.data;
+    } catch (_) {}
+  }
+
+  let activeMandi = mandiPrices;
+  if (!activeMandi || !activeMandi.length) {
+    try {
+      const m = await marketPriceService.getMandiPrices({ district: 'Visakhapatnam', limit: 8 });
+      activeMandi = m.data;
+    } catch (_) {}
+  }
 
   const itemsText = items.map(item => 
     `${item.nameEn} (${item.nameTe || ''}): ${item.remainingKg}kg remaining (Sales: ${item.dailySalesKg}kg/day, Price: ₹${item.pricePerKg}/kg, Days of stock left: ${item.daysLeft?.toFixed(2) || '0'}, Priority: ${item.priority}, Recommended Buy: ${item.recommendedBuyKg}kg, Cost: ₹${item.estimatedCost})`
   ).join('\n');
 
-  const promptInput = `Shop Cash: ₹${budget}. Total Allocated: ₹${totalCost}. Remaining Cash: ₹${remainingCash}.\nItems Data:\n${itemsText}`;
+  let weatherContext = '';
+  if (activeWeather && activeWeather.current) {
+    weatherContext = `\nLive Weather Context (Visakhapatnam): Temperature ${activeWeather.current.temperatureC}°C, Relative Humidity ${activeWeather.current.relativeHumidityPercent}%, Precipitation ${activeWeather.current.precipitationMm}mm, Wind Speed ${activeWeather.current.windSpeedKmH || 0} km/h. Produce Advisories: ${(activeWeather.advisories || []).map(a => a.textEn).join('; ') || 'Standard coastal conditions'}.`;
+  }
+
+  let mandiContext = '';
+  if (Array.isArray(activeMandi) && activeMandi.length > 0) {
+    mandiContext = `\nLive AGMARKNET Mandi Price Benchmarks (AP / Visakhapatnam): ` + 
+      activeMandi.slice(0, 8).map(m => `${m.commodity}: Modal ₹${m.modalPricePerKg}/kg (Range ₹${m.minPricePerKg}-₹${m.maxPricePerKg})`).join(', ');
+  }
+
+  const promptInput = `Shop Cash: ₹${budget}. Total Allocated: ₹${totalCost}. Remaining Cash: ₹${remainingCash}.\nItems Data:\n${itemsText}${weatherContext}${mandiContext}`;
 
   if (!ai) {
     console.log('[LocalPulse AI] No GEMINI_API_KEY set. Delivering grounded fallback response.');
-    const fallback = generateFallbackExplanation(budget, totalCost, remainingCash, items);
+    const fallback = generateFallbackExplanation(budget, totalCost, remainingCash, items, activeWeather, activeMandi);
     return res.json({
       success: true,
       source: 'simulated_grounded_engine',
@@ -215,9 +277,12 @@ CRITICAL INSTRUCTIONS:
 2. The "telugu_audio_script" must be concise and match this exact shape and style:
    "ఈ రోజు 20 కేజీల టమాటాలు (₹480), 20 కేజీల ఉల్లిపాయలు (₹600) కొనండి. మీ వద్ద 4 రోజులకు సరిపడా బంగాళాదుంపలు ఉన్నందున వాటిని కొనవద్దు. మిగిలిన నగదు: ₹920."
 3. Provide simple English translation in "english_explanation".
-4. Return ONLY a valid JSON object matching the requested schema. No markdown formatting ticks before or after.`;
+4. Market & Weather Grounding:
+   - In "mandi_tip", compare the recommended purchase prices against the live AGMARKNET wholesale modal rates provided in the context, and provide actionable purchasing tips.
+   - For perishables in "key_actions" and "items_to_skip", integrate today's weather observation (temperature, humidity, precipitation) into the operational advice.
+5. Return ONLY a valid JSON object matching the requested schema. No markdown formatting ticks before or after.`;
 
-    const userPrompt = `Here is the morning procurement math for a Visakhapatnam vendor:
+    const userPrompt = `Here is the morning procurement math and market intelligence for a Visakhapatnam vendor:
 ${promptInput}
 
 Generate a structured JSON response matching this schema:
@@ -259,7 +324,7 @@ Generate a structured JSON response matching this schema:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       contents: [
         { role: 'user', parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }
       ],
@@ -274,24 +339,124 @@ Generate a structured JSON response matching this schema:
       parsedData = JSON.parse(responseText.trim().replace(/^```json/, '').replace(/```$/, ''));
     } catch (parseErr) {
       console.warn('[LocalPulse AI] JSON parse error from Gemini output, using structured fallback:', parseErr);
-      parsedData = generateFallbackExplanation(budget, totalCost, remainingCash, items);
+      parsedData = generateFallbackExplanation(budget, totalCost, remainingCash, items, activeWeather, activeMandi);
     }
 
     return res.json({
       success: true,
-      source: 'gemini-3.8-flash',
+      source: 'gemini-2.5-flash',
       data: parsedData
     });
-
-  } catch (error) {
-    console.error('[LocalPulse AI] Gemini API call error:', error);
-    const fallback = generateFallbackExplanation(budget, totalCost, remainingCash, items);
+  } catch (apiErr) {
+    console.error('[LocalPulse AI] Gemini generation error, using fallback:', apiErr.message);
+    const fallback = generateFallbackExplanation(budget, totalCost, remainingCash, items, activeWeather, activeMandi);
     return res.json({
       success: true,
-      source: 'fallback_after_error',
-      error: error.message,
+      source: 'simulated_grounded_engine',
       data: fallback
     });
+  }
+});
+
+// In-memory rate limiting map: ip -> { count, resetTime }
+const rateLimitMap = new Map();
+function checkRateLimit(ip, limit = 30, windowMs = 60000) {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip) || { count: 0, resetTime: now + windowMs };
+  if (now > entry.resetTime) {
+    entry.count = 1;
+    entry.resetTime = now + windowMs;
+  } else {
+    entry.count += 1;
+  }
+  rateLimitMap.set(ip, entry);
+  return entry.count <= limit;
+}
+
+// POST /api/extract-document: Multimodal Gemini Vision Document & Invoice Extractor
+app.post('/api/extract-document', async (req, res) => {
+  const clientIp = req.ip || req.connection?.remoteAddress || '127.0.0.1';
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({
+      success: false,
+      error: 'Rate limit exceeded. Please wait a moment before uploading another document.'
+    });
+  }
+
+  let fileBuffer = null;
+  let mimeType = null;
+  let fileName = 'document';
+  let language = req.query.lang || 'en';
+
+  const contentType = req.headers['content-type'] || '';
+
+  if (contentType.includes('multipart/form-data')) {
+    if (!Buffer.isBuffer(req.body)) {
+      return res.status(400).json({ success: false, error: 'Malformed multipart body' });
+    }
+    const { fields, files } = parseMultipartFormData(req.body, contentType);
+    if (!files || files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No file found in multipart upload' });
+    }
+    const uploadedFile = files[0];
+    fileBuffer = uploadedFile.buffer;
+    mimeType = uploadedFile.mimeType;
+    fileName = uploadedFile.filename || 'document';
+    if (fields.language) language = fields.language;
+  } else if (contentType.includes('application/json')) {
+    const { fileBase64, mimeType: declaredMime, fileName: declaredName, language: declaredLang } = req.body || {};
+    if (!fileBase64) {
+      return res.status(400).json({ success: false, error: 'Missing fileBase64 payload' });
+    }
+    const cleanBase64 = fileBase64.replace(/^data:[^;]+;base64,/, '');
+    fileBuffer = Buffer.from(cleanBase64, 'base64');
+    mimeType = declaredMime;
+    if (declaredName) fileName = declaredName;
+    if (declaredLang) language = declaredLang;
+  } else {
+    return res.status(415).json({
+      success: false,
+      error: 'Unsupported content-type. Please use multipart/form-data or application/json.'
+    });
+  }
+
+  // File signature, size, and page validation
+  const validation = validateFileBuffer(fileBuffer, mimeType, fileName);
+  if (!validation.valid) {
+    const statusCode = validation.error.includes('exceeds maximum allowed limit') ? 413 : 400;
+    return res.status(statusCode).json({ success: false, error: validation.error });
+  }
+
+  try {
+    const extractionPromise = documentVisionService.extractDocument({
+      fileBuffer,
+      mimeType: validation.mimeType,
+      fileName,
+      language
+    });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Document extraction timed out after 30 seconds')), 30000)
+    );
+
+    const result = await Promise.race([extractionPromise, timeoutPromise]);
+
+    return res.json({
+      success: true,
+      data: result
+    });
+  } catch (err) {
+    console.error('[Extract Document Error]:', err.message);
+    const isApiKeyError = err.message && (err.message.includes('GEMINI_API_KEY') || err.message.includes('API key'));
+    const isTimeout = err.message && err.message.includes('timed out');
+    const statusCode = isApiKeyError ? 503 : isTimeout ? 504 : 500;
+
+    return res.status(statusCode).json({
+      success: false,
+      error: err.message || 'Failed to extract document'
+    });
+  } finally {
+    fileBuffer = null;
   }
 });
 
